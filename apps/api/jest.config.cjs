@@ -43,6 +43,9 @@ module.exports = {
       globalSetup: '<rootDir>/test/db/global-setup.ts',
     },
   ],
+  // Global (Jest ignores it per project): DB flows register users (Argon2id) and
+  // post many entries while files run in parallel.
+  testTimeout: 30_000,
   collectCoverageFrom: ['src/**/*.ts', '!src/main.ts', '!src/generated/**'],
   coverageDirectory: 'coverage',
 };

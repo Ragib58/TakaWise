@@ -13,6 +13,7 @@ const prodBase = {
   CORS_ORIGINS: 'https://app.takawise.example',
   APP_BASE_URL: 'https://app.takawise.example',
   SMTP_URL: 'smtps://relay.example.com:465',
+  REDIS_URL: 'rediss://cache.example.com:6380',
 };
 
 describe('loadConfig', () => {
@@ -70,6 +71,12 @@ describe('loadConfig', () => {
 
     it('enables rate limiting by default', () => {
       expect(load().THROTTLE_ENABLED).toBe(true);
+    });
+
+    it('requires REDIS_URL in production while the worker is enabled', () => {
+      const { REDIS_URL: _redis, ...withoutRedis } = prodBase;
+      expect(() => load(withoutRedis)).toThrow(/REDIS_URL: required in production/);
+      expect(load({ ...withoutRedis, WORKER_ENABLED: 'false' }).WORKER_ENABLED).toBe(false);
     });
   });
 

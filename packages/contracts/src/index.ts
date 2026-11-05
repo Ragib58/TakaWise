@@ -3,6 +3,7 @@ export * from './api/health';
 export * from './auth';
 export * from './ledger';
 export * from './money';
+export * from './planning';
 
 /** Versioned base path for all API routes. */
 export const API_PREFIX = 'api/v1';

@@ -177,8 +177,8 @@ export class TransactionsService {
       return await this.idempotency.execute({
         userId,
         key: idempotencyKey,
-        scope: `POST /transactions/${id}/reverse`,
-        request: input,
+        scope: 'POST /transactions/:id/reverse',
+        request: { id, ...input },
         responseStatus: HttpStatus.OK,
         run: async (tx) => {
           const original = await tx.transaction.findFirst({

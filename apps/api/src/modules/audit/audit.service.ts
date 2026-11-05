@@ -28,7 +28,24 @@ export type AuditAction =
   | 'transaction.posted'
   | 'transaction.reversed'
   | 'transfer.posted'
-  | 'transfer.reversed';
+  | 'transfer.reversed'
+  | 'category.created'
+  | 'category.updated'
+  | 'category.archived'
+  | 'category.restored'
+  | 'budget.created'
+  | 'budget.updated'
+  | 'budget.archived'
+  | 'budget.restored'
+  | 'goal.created'
+  | 'goal.updated'
+  | 'goal.archived'
+  | 'goal.contribution.posted'
+  | 'goal.contribution.reversed'
+  | 'reminder.created'
+  | 'reminder.updated'
+  | 'reminder.completed'
+  | 'reminder.cancelled';
 
 export type AuditEvent = {
   action: AuditAction;

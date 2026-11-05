@@ -93,6 +93,16 @@ All of these live in `20261105152200_ledger_constraints/migration.sql`. The appl
 | No cross-user references                                                                                                                                            | composite FKs `(x_id, user_id)` plus owner checks for categories and ledger lines                                                                          | `23503` / `23514`                                                                                                                                  |
 | Category type matches its use                                                                                                                                       | `tw_assert_category_usable`                                                                                                                                | `23514`                                                                                                                                            |
 
+### Added in Phase 5 (`20261105170000_planning_rules`)
+
+| Invariant                                                   | Mechanism                                                      |
+| ----------------------------------------------------------- | -------------------------------------------------------------- |
+| One active budget per user, month and currency              | partial unique index `budgets_user_period_currency_active_key` |
+| Categories at most two levels deep                          | `tw_trg_categories_parent` (redefined)                         |
+| ACHIEVED goals have `achieved_at`; ARCHIVED ⇔ `archived_at` | CHECKs on `savings_goals`                                      |
+| DONE reminders ⇔ `completed_at`                             | CHECK on `reminders`                                           |
+| Fast scan of due, un-notified reminders                     | partial index `reminders_due_unnotified_idx`                   |
+
 ### Application-only rules (not enforced in SQL)
 
 - Archived accounts and categories cannot receive **new** postings. History may still reference them.

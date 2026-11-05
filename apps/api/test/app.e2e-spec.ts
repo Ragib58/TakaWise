@@ -200,7 +200,11 @@ describe('API foundation in production mode (e2e)', () => {
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp({ NODE_ENV: 'production', SMTP_URL: 'smtp://unused.invalid:25' });
+    app = await createTestApp({
+      NODE_ENV: 'production',
+      SMTP_URL: 'smtp://unused.invalid:25',
+      REDIS_URL: 'redis://unused.invalid:6379',
+    });
   });
 
   afterAll(async () => {

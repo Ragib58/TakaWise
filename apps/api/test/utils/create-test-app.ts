@@ -47,6 +47,8 @@ export async function createTestApp(
     JWT_ACCESS_SECRET: 'test-jwt-access-secret-0123456789abcdef',
     AUTH_HMAC_SECRET: 'test-auth-hmac-secret-0123456789abcdef',
     THROTTLE_ENABLED: 'false',
+    // Background schedulers are exercised directly in tests, not via Redis.
+    WORKER_ENABLED: 'false',
     ...env,
   });
 

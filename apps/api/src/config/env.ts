@@ -53,7 +53,20 @@ export const envSchema = z
       .string()
       .regex(/^postgres(?:ql)?:\/\/.+/, 'must be a postgres:// or postgresql:// URL'),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
-    REDIS_URL: z.string().min(1).optional(),
+    REDIS_URL: z
+      .string()
+      .regex(/^rediss?:\/\/.+/, 'must be a redis:// or rediss:// URL')
+      .optional(),
+    /** Redis key prefix for BullMQ, so environments sharing a Redis never mix jobs. */
+    JOBS_PREFIX: z
+      .string()
+      .regex(/^[a-z0-9-]{1,32}$/)
+      .default('takawise'),
+    /** Run BullMQ schedulers/workers in this process (ADR-014). Needs REDIS_URL. */
+    WORKER_ENABLED: z
+      .enum(['true', 'false', '1', '0'])
+      .default('true')
+      .transform((v) => v === 'true' || v === '1'),
     /** ADR-017: print OTPs to the console. Development only — rejected otherwise. */
     DEV_LOG_OTP: booleanFlag,
 
@@ -95,6 +108,13 @@ export const envSchema = z
       }
       if (!env.SMTP_URL) {
         ctx.addIssue({ code: 'custom', path: ['SMTP_URL'], message: 'required in production' });
+      }
+      if (env.WORKER_ENABLED && !env.REDIS_URL) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['REDIS_URL'],
+          message: 'required in production when WORKER_ENABLED=true',
+        });
       }
       for (const key of ['JWT_ACCESS_SECRET', 'AUTH_HMAC_SECRET'] as const) {
         if (/change-?me|placeholder|not-a-secret/i.test(env[key])) {

@@ -16,6 +16,8 @@ export const readinessResponseSchema = z.object({
   status: z.enum(['ok', 'degraded']),
   checks: z.object({
     database: dependencyStatusSchema,
+    /** 'disabled' when the deployment runs without Redis (no background jobs). */
+    redis: z.enum(['up', 'down', 'disabled']),
   }),
   timestamp: z.iso.datetime(),
 });

@@ -102,7 +102,8 @@ Then open http://localhost:3100, http://localhost:4000/api/v1/health and http://
 - Error: `{ "error": { "code", "message", "details": [{ "field", "message" }], "requestId" } }`
 - Every response carries an `X-Request-Id` header. A well-formed incoming one is reused.
 - Money is always sent as a **decimal string** (e.g. `"450.00"`), never a JSON number.
-- Financial commands (`POST /accounts`, `/transactions`, `/transfers`, `…/reverse`) require an `Idempotency-Key: <uuid>` header. See [docs/api/ledger.md](docs/api/ledger.md) for posting rules, balances and errors.
+- Financial commands (`POST /accounts`, `/transactions`, `/transfers`, `…/reverse`, goal contributions) require an `Idempotency-Key: <uuid>` header. See [docs/api/ledger.md](docs/api/ledger.md) for posting rules, balances and errors.
+- Budgets, savings goals (earmark model), reminders, notifications and background jobs: [docs/api/planning.md](docs/api/planning.md).
 
 ## Database
 

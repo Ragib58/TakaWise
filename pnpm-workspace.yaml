@@ -13,3 +13,5 @@ onlyBuiltDependencies:
 # Telemetry/analytics postinstall scripts are explicitly denied.
 ignoredBuiltDependencies:
   - '@scarf/scarf'
+  # Optional native accelerator for bullmq; prebuilt binaries are used when available.
+  - msgpackr-extract

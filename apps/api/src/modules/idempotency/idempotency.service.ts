@@ -35,11 +35,16 @@ export class IdempotencyService {
   async execute<T extends Prisma.InputJsonValue>(args: {
     userId: string;
     key: string;
+    /**
+     * Route TEMPLATE (e.g. "POST /transactions/:id/reverse"), max 64 chars.
+     * Path ids belong in `request` so they are covered by the request hash.
+     */
     scope: string;
     request: unknown;
     responseStatus: number;
     run: (tx: Prisma.TransactionClient) => Promise<T>;
   }): Promise<IdempotentResult<T>> {
+    if (args.scope.length > 64) throw new Error(`Idempotency scope too long: ${args.scope}`);
     const requestHash = sha256Hex(`${args.scope}\n${canonicalJson(args.request)}`);
 
     const existing = await this.replay<T>(args.userId, args.key, args.scope, requestHash);
@@ -74,6 +79,14 @@ export class IdempotencyService {
       }
       throw error;
     }
+  }
+
+  /** Scheduled cleanup of keys past their 24 h window. */
+  async purgeExpired(now: Date = new Date()): Promise<number> {
+    const { count } = await this.prisma.idempotencyKey.deleteMany({
+      where: { expiresAt: { lte: now } },
+    });
+    return count;
   }
 
   private async replay<T>(

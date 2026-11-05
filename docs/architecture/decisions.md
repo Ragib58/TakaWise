@@ -215,6 +215,13 @@ Posted journals and lines are immutable: application code never updates or delet
 **Decision:** (a) earmark. A goal links to one active asset account in the same currency. `goal_contributions` is append-only, with no ledger journal. Each row has a positive `amount` and a `kind`: `CONTRIBUTION` (set money aside), `WITHDRAWAL` (release money) or `REVERSAL` (corrects one earlier row, with the same amount and once only). Progress = Σ CONTRIBUTION − Σ WITHDRAWAL over rows that are `POSTED` and not reversed. _(Refined in Phase 2: the original wording "a withdrawal is a reversal row" conflated two different user intents.)_ A contribution is rejected if Σ earmarks across that account's goals would exceed its current ledger balance. If the balance later falls below the earmarks, the UI warns ("under-funded"), and no automatic changes are made. Goal amounts cannot be edited directly.
 **Why:** No artificial money movement, no extra account the user doesn't actually have, and it fits the common Bangladesh pattern of "this bank balance is for X". Users who actually keep a separate savings account can link the goal to that account, which gives the same result as (b).
 **UI copy (required):** "Goal savings are set aside from {account}. No money is moved."
+**Implementation (Phase 5):**
+
+- The cap is checked under a row lock on the linked account.
+- Archiving a goal releases its earmark.
+- Reversing an entry is always allowed, even if it leaves the account under-funded. The goal then shows `underFunded`.
+- Reaching the target creates a `GOAL_ACHIEVED` notification.
+- See [docs/api/planning.md](../api/planning.md).
 
 ### ADR-010 — Corrections by reversal _(Accepted 2026-11-05)_
 
@@ -255,6 +262,13 @@ Posted journals and lines are immutable: application code never updates or delet
 **Decision:** The actor always comes from the verified JWT (`@CurrentUser()`), and any `userId` in a body or query is rejected by the schemas. Every repository method on owned tables takes `userId` and includes it in the `WHERE` clause. A resource owned by someone else returns **404** (`NOT_FOUND`). A shared cross-user test suite seeds users A and B and calls every route with A's token against B's IDs. Default deny: every controller is protected unless decorated `@Public()`.
 
 ### ADR-014 — Background jobs & outbox
+
+**Implementation (Phase 5):**
+
+- The `bullmq` package is used directly; `@nestjs/bullmq` is not, because its 12.x is ESM-only (ADR-018).
+- There is one `maintenance` queue with job schedulers: `reminders.dispatch` (60 s) and `idempotency.cleanup` (1 h). Handlers are database sweeps that are safe to run concurrently (`FOR UPDATE SKIP LOCKED`). There are no per-entity delayed jobs, so edits and cancellations never leave stale jobs behind.
+- Startup never blocks on Redis. Readiness reports a Redis outage as `degraded`.
+- The outbox _publisher_ is deferred until the first consumer exists (budget alerts, v1.1).
 
 **Decision:** BullMQ queues (`email`, `reminders`, `outbox`, `maintenance`) run inside the API process for the MVP, behind a `WORKER_ENABLED` flag so a separate worker deployment is possible later. Financial commands write `outbox_events` in the same DB transaction, and a poller publishes them to queues. As a result, notifications never fire for rolled-back postings. Redis is never authoritative.
 

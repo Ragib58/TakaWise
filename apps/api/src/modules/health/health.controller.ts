@@ -7,6 +7,7 @@ import { APP_CONFIG } from '../../config/config.module';
 import type { AppConfig } from '../../config/env';
 import { PrismaService } from '../../database/prisma.service';
 import { Public } from '../auth/auth.decorators';
+import { RedisHealth } from '../jobs/redis-health.service';
 
 @ApiTags('health')
 @Public()
@@ -16,6 +17,7 @@ export class HealthController {
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly prisma: PrismaService,
+    private readonly redis: RedisHealth,
   ) {}
 
   /** Liveness: the process is up. Never touches dependencies. */
@@ -32,19 +34,26 @@ export class HealthController {
     };
   }
 
-  /** Readiness: dependencies reachable. Redis is added with BullMQ (Phase 5). */
+  /**
+   * Readiness. PostgreSQL down → 503 (cannot serve). Redis down → 200 "degraded":
+   * requests still work, only background jobs (reminders, cleanup) pause.
+   */
   @Get('ready')
-  @ApiOkResponse({ description: 'Ready to serve traffic' })
-  @ApiServiceUnavailableResponse({ description: 'A dependency is unavailable' })
+  @ApiOkResponse({ description: 'Ready to serve traffic (possibly degraded)' })
+  @ApiServiceUnavailableResponse({ description: 'The database is unavailable' })
   async ready(): Promise<ReadinessResponse> {
-    const database = (await this.prisma.isHealthy()) ? 'up' : 'down';
-    if (database === 'down') {
+    const [databaseOk, redis] = await Promise.all([this.prisma.isHealthy(), this.redis.status()]);
+    if (!databaseOk) {
       throw new AppException(
         'SERVICE_UNAVAILABLE',
         'The service is temporarily unavailable.',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
-    return { status: 'ok', checks: { database }, timestamp: new Date().toISOString() };
+    return {
+      status: redis === 'down' ? 'degraded' : 'ok',
+      checks: { database: 'up', redis },
+      timestamp: new Date().toISOString(),
+    };
   }
 }

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { RequireAuth, SessionBootstrap } from '@/components/auth/auth-provider';
 import { BottomNav, SidebarNav } from '@/components/layout/app-nav';
 import { UserMenu } from '@/components/layout/user-menu';
+import { QueryProvider } from '@/components/providers/query-provider';
 
 /**
  * Authenticated application shell: sidebar + top bar on desktop, compact header +
@@ -24,7 +25,9 @@ export default function AppLayout({ children }: Readonly<{ children: ReactNode }
           <UserMenu />
         </header>
         <main className="flex flex-1 flex-col p-4 pb-24 md:p-6 md:pb-6">
-          <RequireAuth>{children}</RequireAuth>
+          <QueryProvider>
+            <RequireAuth>{children}</RequireAuth>
+          </QueryProvider>
         </main>
       </div>
       <BottomNav />

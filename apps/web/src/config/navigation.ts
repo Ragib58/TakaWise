@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   Bell,
   ChartPie,
+  Inbox,
   LayoutDashboard,
   type LucideIcon,
   PiggyBank,
@@ -26,5 +27,6 @@ export const APP_NAV: NavItem[] = [
   { href: '/app/goals', label: 'Goals', icon: Target },
   { href: '/app/reports', label: 'Reports', icon: ChartPie },
   { href: '/app/reminders', label: 'Reminders', icon: Bell },
+  { href: '/app/notifications', label: 'Notifications', icon: Inbox },
   { href: '/app/settings/profile', label: 'Settings', icon: Settings, mobile: true },
 ];

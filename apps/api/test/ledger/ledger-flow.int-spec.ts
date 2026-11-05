@@ -380,6 +380,19 @@ describe('ledger, accounts, transactions and transfers (API + DB)', () => {
       expect(after.journals - before.journals).toBe(1);
     });
 
+    it('a key reused for a different resource (path id) is a mismatch, not a replay', async () => {
+      const t1 = (await api.post('/transactions', txnBody(cash, food, { amount: '1' })).expect(201))
+        .body.data.id as string;
+      const t2 = (await api.post('/transactions', txnBody(cash, food, { amount: '1' })).expect(201))
+        .body.data.id as string;
+      const key = randomUUID();
+      await api.post(`/transactions/${t1}/reverse`, {}, key).expect(200);
+      expect(
+        (await api.post(`/transactions/${t2}/reverse`, {}, key).expect(422)).body.error.code,
+      ).toBe('IDEMPOTENCY_MISMATCH');
+      expect((await api.get(`/transactions/${t2}`).expect(200)).body.data.status).toBe('POSTED');
+    });
+
     it('a failed command stores no key, so the client can retry with the same key', async () => {
       const key = randomUUID();
       await api.post('/transactions', txnBody(cash, food, { currency: 'USD' }), key).expect(400);

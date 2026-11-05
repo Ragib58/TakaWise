@@ -157,8 +157,8 @@ export class TransfersService {
       return await this.idempotency.execute({
         userId,
         key: idempotencyKey,
-        scope: `POST /transfers/${id}/reverse`,
-        request: input,
+        scope: 'POST /transfers/:id/reverse',
+        request: { id, ...input },
         responseStatus: HttpStatus.OK,
         run: async (tx) => {
           const original = await tx.transfer.findFirst({ where: { id, userId } });
