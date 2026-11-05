@@ -4,8 +4,8 @@ import { z } from 'zod';
  * Environment contract for the API. Parsed once at boot; the process refuses to
  * start on invalid configuration (fail fast, never run with unsafe defaults).
  *
- * Variables for later phases (REDIS_URL, JWT_*, EMAIL_*, OBJECT_STORAGE_*) become
- * required in the phase that first uses them.
+ * Variables for later phases (REDIS_URL, OBJECT_STORAGE_*) become required in the
+ * phase that first uses them.
  */
 
 const booleanFlag = z
@@ -24,6 +24,8 @@ const originSchema = z.string().refine(
   },
   { message: 'must be a bare origin like https://app.example.com (no path or trailing slash)' },
 );
+
+const secretSchema = z.string().min(32, 'must be at least 32 characters of random data');
 
 export const envSchema = z
   .object({
@@ -54,8 +56,63 @@ export const envSchema = z
     REDIS_URL: z.string().min(1).optional(),
     /** ADR-017: print OTPs to the console. Development only — rejected otherwise. */
     DEV_LOG_OTP: booleanFlag,
+
+    // ── Auth (Phase 3, ADR-011) ──
+    /** HS256 signing key for access tokens. */
+    JWT_ACCESS_SECRET: secretSchema,
+    /** HMAC key for OTP codes and IP pseudonymisation (never the same as the JWT key). */
+    AUTH_HMAC_SECRET: secretSchema,
+    ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+    /** Defaults to true in production; may only be disabled outside production. */
+    COOKIE_SECURE: z.enum(['true', 'false']).optional(),
+    /** Parent domain for the CSRF cookie when web and API are on sibling subdomains. */
+    COOKIE_DOMAIN: z.string().min(1).optional(),
+    /** Number of trusted reverse-proxy hops (Express "trust proxy"). */
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+    /** Request rate limiting (disable only in tests). */
+    THROTTLE_ENABLED: z
+      .enum(['true', 'false', '1', '0'])
+      .default('true')
+      .transform((v) => v === 'true' || v === '1'),
+
+    // ── Email ──
+    /** e.g. smtp://localhost:1035 (Mailpit) or an SMTP relay URL. Required in production. */
+    SMTP_URL: z
+      .string()
+      .regex(/^smtps?:\/\/.+/, 'must be an smtp:// or smtps:// URL')
+      .optional(),
+    EMAIL_FROM: z.string().min(3).default('TakaWise <no-reply@takawise.local>'),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production') {
+      if (env.COOKIE_SECURE === 'false') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['COOKIE_SECURE'],
+          message: 'cookies must be Secure in production',
+        });
+      }
+      if (!env.SMTP_URL) {
+        ctx.addIssue({ code: 'custom', path: ['SMTP_URL'], message: 'required in production' });
+      }
+      for (const key of ['JWT_ACCESS_SECRET', 'AUTH_HMAC_SECRET'] as const) {
+        if (/change-?me|placeholder|not-a-secret/i.test(env[key])) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'looks like a placeholder; use a random secret',
+          });
+        }
+      }
+    }
+    if (env.JWT_ACCESS_SECRET === env.AUTH_HMAC_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_HMAC_SECRET'],
+        message: 'must differ from JWT_ACCESS_SECRET',
+      });
+    }
     if (env.DEV_LOG_OTP && env.NODE_ENV !== 'development') {
       ctx.addIssue({
         code: 'custom',
@@ -65,9 +122,10 @@ export const envSchema = z
     }
   });
 
-export type AppConfig = z.infer<typeof envSchema> & {
+export type AppConfig = Omit<z.infer<typeof envSchema>, 'COOKIE_SECURE'> & {
   readonly isProduction: boolean;
   readonly swaggerEnabled: boolean;
+  readonly cookieSecure: boolean;
 };
 
 export class InvalidConfigError extends Error {
@@ -98,11 +156,12 @@ export function loadConfig(raw: NodeJS.ProcessEnv | Record<string, string | unde
     throw new InvalidConfigError(issues);
   }
 
-  const env = parsed.data;
+  const { COOKIE_SECURE, ...env } = parsed.data;
   const isProduction = env.NODE_ENV === 'production';
   return Object.freeze({
     ...env,
     isProduction,
     swaggerEnabled: !isProduction,
+    cookieSecure: COOKIE_SECURE === undefined ? isProduction : COOKIE_SECURE === 'true',
   });
 }

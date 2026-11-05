@@ -20,6 +20,13 @@ export const API_ERROR_CODES = [
   'RATE_LIMITED',
   'INTERNAL_ERROR',
   'SERVICE_UNAVAILABLE',
+  // Auth (Phase 3)
+  'INVALID_CREDENTIALS',
+  'EMAIL_NOT_VERIFIED',
+  'ACCOUNT_DISABLED',
+  'INVALID_OR_EXPIRED_CODE',
+  'WEAK_PASSWORD',
+  'CSRF_FAILED',
 ] as const;
 
 export const apiErrorCodeSchema = z.enum(API_ERROR_CODES);

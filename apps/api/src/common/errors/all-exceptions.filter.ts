@@ -25,6 +25,12 @@ const DEFAULT_MESSAGES: Record<ApiErrorCode, string> = {
   RATE_LIMITED: 'Too many requests. Please try again later.',
   INTERNAL_ERROR: 'Something went wrong. Please try again.',
   SERVICE_UNAVAILABLE: 'The service is temporarily unavailable.',
+  INVALID_CREDENTIALS: 'Incorrect email or password.',
+  EMAIL_NOT_VERIFIED: 'Please verify your email address first.',
+  ACCOUNT_DISABLED: 'This account is not active. Please contact support.',
+  INVALID_OR_EXPIRED_CODE: 'The code is invalid or has expired. Request a new one.',
+  WEAK_PASSWORD: 'Choose a stronger password.',
+  CSRF_FAILED: 'The request could not be verified. Please refresh and try again.',
 };
 
 export function codeForStatus(status: number): ApiErrorCode {

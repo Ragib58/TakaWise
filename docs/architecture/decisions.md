@@ -234,6 +234,17 @@ Posted journals and lines are immutable: application code never updates or delet
 - Authenticated `/app/*` pages are client-rendered and perform a silent refresh on load, and the marketing pages are static. Edge middleware only redirects when the `tw_csrf` hint cookie is absent, as a UX shortcut that does not provide security.
 - A password reset or "log out everywhere" revokes all sessions.
 
+**Implementation notes (Phase 3, 2026-11-05):**
+
+- Every authenticated request also checks that the session row is live and the user is ACTIVE, so revocation takes effect immediately. This costs one indexed primary-key lookup per request.
+- Refresh tokens are opaque and stored as SHA-256. `JWT_REFRESH_SECRET` is therefore unused. `AUTH_HMAC_SECRET` (which must differ from `JWT_ACCESS_SECRET`) keys OTP and IP hashes.
+- Reuse detection is strict: any second use of a rotated token, including a concurrent double refresh, revokes the family. The web client refreshes single-flight.
+- Verification attempts are committed outside the caller's transaction, so a rollback cannot erase a failed guess.
+- `verify-email` signs the user in. Registration, resend and forgot-password give identical responses whether or not the account exists.
+- Rate limits are in memory, one instance only. Redis storage is planned for Phase 7.
+- `@nestjs/jwt` is pinned to 11.x, because 12.x is ESM-only (ADR-018).
+- Full reference: [docs/api/auth.md](../api/auth.md).
+
 ### ADR-012 — Time handling
 
 **Decision:** All timestamps are `timestamptz` in UTC. Transactions carry `occurredAt` (instant) **and** `effectiveDate` (date), which the server derives using the user's profile timezone (default `Asia/Dhaka`, UTC+6, no DST). Budgets, reports and filters operate on `effectiveDate`. Reminders store `dueAt` in UTC, and the UI converts from and to the user's timezone.

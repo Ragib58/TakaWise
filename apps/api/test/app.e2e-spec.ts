@@ -12,6 +12,7 @@ import type { App } from 'supertest/types';
 import { z } from 'zod';
 import { Paginated } from '../src/common/envelope/paginated';
 import { AppException } from '../src/common/errors/app.exception';
+import { Public } from '../src/modules/auth/auth.decorators';
 import { createTestApp, TEST_ORIGIN } from './utils/create-test-app';
 import { UNREACHABLE_DATABASE_URL } from './utils/test-database';
 
@@ -23,6 +24,7 @@ class EchoDto extends createZodDto(
 ) {}
 
 /** Test-only routes that exercise the global pipeline. Never registered in the real app. */
+@Public()
 @Controller('__test')
 class PipelineTestController {
   @Post('echo')
@@ -198,7 +200,7 @@ describe('API foundation in production mode (e2e)', () => {
   let app: NestExpressApplication;
 
   beforeAll(async () => {
-    app = await createTestApp({ NODE_ENV: 'production' });
+    app = await createTestApp({ NODE_ENV: 'production', SMTP_URL: 'smtp://unused.invalid:25' });
   });
 
   afterAll(async () => {

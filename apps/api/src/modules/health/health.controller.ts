@@ -1,12 +1,16 @@
 import { Controller, Get, HttpStatus, Inject } from '@nestjs/common';
 import { ApiOkResponse, ApiServiceUnavailableResponse, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { HealthResponse, ReadinessResponse } from '@takawise/contracts';
 import { AppException } from '../../common/errors/app.exception';
 import { APP_CONFIG } from '../../config/config.module';
 import type { AppConfig } from '../../config/env';
 import { PrismaService } from '../../database/prisma.service';
+import { Public } from '../auth/auth.decorators';
 
 @ApiTags('health')
+@Public()
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(

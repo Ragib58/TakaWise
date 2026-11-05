@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@hookform/resolvers": "7.0.3",
     "@radix-ui/react-slot": "1.5.0",
     "@takawise/contracts": "workspace:*",
     "class-variance-authority": "0.7.1",
@@ -21,6 +22,7 @@
     "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-hook-form": "7.91.0",
     "tailwind-merge": "3.7.0",
     "zod": "4.6.7"
   },

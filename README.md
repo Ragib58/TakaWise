@@ -111,8 +111,11 @@ PostgreSQL via Prisma 7. Financial invariants are enforced **in the database as 
 
 Environment variables are validated at boot by [apps/api/src/config/env.ts](apps/api/src/config/env.ts), and the API **refuses to start** on invalid or unsafe configuration. In particular:
 
-- Production requires explicit `CORS_ORIGINS` and `APP_BASE_URL`.
+- Production requires explicit `CORS_ORIGINS`, `APP_BASE_URL` and `SMTP_URL`, plus Secure cookies.
+- `JWT_ACCESS_SECRET` and `AUTH_HMAC_SECRET` are required (≥ 32 chars, different from each other). The `change-me…` placeholders in `.env.example` work locally and are rejected in production.
 - `DEV_LOG_OTP=true` is rejected unless `NODE_ENV=development`.
+
+Local email goes to Mailpit: open http://localhost:8035 to read verification and reset codes. The auth model, cookies and every auth variable are documented in [docs/api/auth.md](docs/api/auth.md).
 
 Only placeholders live in `.env.example` files. Never commit real secrets, and never put secrets in `NEXT_PUBLIC_*` variables.
 

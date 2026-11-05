@@ -1,13 +1,18 @@
 import { InvalidConfigError, loadConfig } from './env';
 
-const DATABASE_URL = 'postgresql://user:pass@localhost:5442/takawise';
+const required = {
+  DATABASE_URL: 'postgresql://user:pass@localhost:5442/takawise',
+  JWT_ACCESS_SECRET: 'a'.repeat(40),
+  AUTH_HMAC_SECRET: 'b'.repeat(40),
+};
 
-const load = (raw: Record<string, string> = {}) => loadConfig({ DATABASE_URL, ...raw });
+const load = (raw: Record<string, string> = {}) => loadConfig({ ...required, ...raw });
 
 const prodBase = {
   NODE_ENV: 'production',
   CORS_ORIGINS: 'https://app.takawise.example',
   APP_BASE_URL: 'https://app.takawise.example',
+  SMTP_URL: 'smtps://relay.example.com:465',
 };
 
 describe('loadConfig', () => {
@@ -22,12 +27,50 @@ describe('loadConfig', () => {
     expect(config.isProduction).toBe(false);
   });
 
-  it('requires DATABASE_URL', () => {
-    expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
+  it('requires DATABASE_URL and the auth secrets', () => {
+    expect(() => loadConfig({})).toThrow(
+      /DATABASE_URL[\s\S]*JWT_ACCESS_SECRET[\s\S]*AUTH_HMAC_SECRET/,
+    );
   });
 
   it.each(['mysql://localhost/db', 'localhost:5432', ''])('rejects DATABASE_URL %p', (url) => {
-    expect(() => loadConfig({ DATABASE_URL: url })).toThrow(/DATABASE_URL/);
+    expect(() => load({ DATABASE_URL: url })).toThrow(/DATABASE_URL/);
+  });
+
+  describe('auth secrets and cookies (ADR-011)', () => {
+    it('rejects short secrets', () => {
+      expect(() => load({ JWT_ACCESS_SECRET: 'short' })).toThrow(/JWT_ACCESS_SECRET.*32/);
+    });
+
+    it('rejects reusing the JWT secret as the HMAC secret', () => {
+      expect(() => load({ AUTH_HMAC_SECRET: required.JWT_ACCESS_SECRET })).toThrow(
+        /AUTH_HMAC_SECRET: must differ/,
+      );
+    });
+
+    it('rejects placeholder secrets in production', () => {
+      expect(() =>
+        load({ ...prodBase, JWT_ACCESS_SECRET: 'change-me-please-0123456789abcdefghij' }),
+      ).toThrow(/placeholder/);
+    });
+
+    it('uses Secure cookies in production and refuses to disable them', () => {
+      expect(load(prodBase).cookieSecure).toBe(true);
+      expect(() => load({ ...prodBase, COOKIE_SECURE: 'false' })).toThrow(/COOKIE_SECURE/);
+    });
+
+    it('defaults to non-Secure cookies on plain-http localhost in development', () => {
+      expect(load().cookieSecure).toBe(false);
+    });
+
+    it('requires SMTP_URL in production', () => {
+      const { SMTP_URL: _smtp, ...withoutSmtp } = prodBase;
+      expect(() => load(withoutSmtp)).toThrow(/SMTP_URL: required in production/);
+    });
+
+    it('enables rate limiting by default', () => {
+      expect(load().THROTTLE_ENABLED).toBe(true);
+    });
   });
 
   it('parses a comma-separated CORS allowlist', () => {
