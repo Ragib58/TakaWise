@@ -196,6 +196,7 @@ Posted journals and lines are immutable: application code never updates or delet
 
 **Decision:** The `Idempotency-Key` header (UUID) is **required** on `POST /accounts`, `/transactions`, `/transfers`, `/transactions/:id/reverse` and `/goals/:id/contributions`. The `idempotency_keys` row (PK `userId, key`) is inserted **inside the same DB transaction** as the posting, along with a SHA-256 hash of the canonical request. On a replay with the same hash, the stored response is returned. With a different hash, the API returns 422. Concurrent duplicates hit the PK and the loser retries the read. Keys expire after 24 h (a cleanup job removes them).
 **Consequences:** Retries after network failures or double-clicks are safe.
+**Implementation (Phase 4):** `IdempotencyService.execute()` runs the command inside the same `$transaction` that inserts the key. The request hash is SHA-256 of `scope + canonical JSON`. A replay sets the `Idempotent-Replayed: true` header, and a lost race on the primary key rolls back and returns the winner's stored response. Expired keys (> 24 h) are deleted lazily when the same key is reused. A scheduled cleanup job arrives with BullMQ in Phase 5.
 
 ### ADR-007 — Chart of accounts
 

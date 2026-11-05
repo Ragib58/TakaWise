@@ -20,7 +20,15 @@ export type AuditAction =
   | 'auth.password_reset.requested'
   | 'auth.password_reset.completed'
   | 'auth.password_changed'
-  | 'user.profile.updated';
+  | 'user.profile.updated'
+  | 'account.created'
+  | 'account.updated'
+  | 'account.archived'
+  | 'account.restored'
+  | 'transaction.posted'
+  | 'transaction.reversed'
+  | 'transfer.posted'
+  | 'transfer.reversed';
 
 export type AuditEvent = {
   action: AuditAction;

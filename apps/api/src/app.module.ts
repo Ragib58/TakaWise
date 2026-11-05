@@ -9,7 +9,10 @@ import { buildLoggerParams } from './common/logging/logger.config';
 import { AppConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env';
 import { DatabaseModule } from './database/database.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { EmailModule } from './modules/email/email.module';
@@ -34,6 +37,9 @@ export class AppModule {
         AuditModule,
         EmailModule,
         AuthModule,
+        LedgerModule,
+        AccountsModule,
+        TransactionsModule,
         HealthModule,
       ],
       providers: [
