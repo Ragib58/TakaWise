@@ -1,5 +1,6 @@
 export * from './api/envelope';
 export * from './api/health';
+export * from './money';
 
 /** Versioned base path for all API routes. */
 export const API_PREFIX = 'api/v1';

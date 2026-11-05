@@ -7,6 +7,7 @@ import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { buildLoggerParams } from './common/logging/logger.config';
 import { AppConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env';
+import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({})
@@ -18,6 +19,7 @@ export class AppModule {
       imports: [
         AppConfigModule.forRoot(config),
         LoggerModule.forRoot(buildLoggerParams(config)),
+        DatabaseModule,
         HealthModule,
       ],
       providers: [

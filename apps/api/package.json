@@ -10,15 +10,29 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:unit": "jest --selectProjects unit",
+    "test:db": "jest --selectProjects db",
+    "test:watch": "jest --watch --selectProjects unit",
+    "test:cov": "jest --coverage",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:create": "prisma migrate dev --create-only",
+    "db:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force && prisma db seed",
+    "db:seed": "prisma db seed",
+    "db:status": "prisma migrate status",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@nestjs/common": "11.2.8",
     "@nestjs/core": "11.2.8",
     "@nestjs/platform-express": "11.2.8",
     "@nestjs/swagger": "11.4.8",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
     "@takawise/contracts": "workspace:*",
+    "decimal.js": "10.6.0",
     "helmet": "8.3.0",
     "nestjs-pino": "5.3.1",
     "nestjs-zod": "5.5.0",
@@ -45,48 +59,9 @@
     "eslint": "9.39.5",
     "jest": "30.5.2",
     "pino-pretty": "13.2.0",
+    "prisma": "7.10.1",
     "supertest": "7.3.1",
+    "tsx": "4.23.15",
     "typescript": "~6.0.3"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "rootDir": ".",
-    "roots": [
-      "<rootDir>/src",
-      "<rootDir>/test"
-    ],
-    "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
-    "moduleFileExtensions": [
-      "ts",
-      "js",
-      "json"
-    ],
-    "transform": {
-      "^.+\\.ts$": [
-        "@swc/jest",
-        {
-          "swcrc": false,
-          "jsc": {
-            "parser": {
-              "syntax": "typescript",
-              "decorators": true
-            },
-            "transform": {
-              "legacyDecorator": true,
-              "decoratorMetadata": true
-            },
-            "target": "es2023"
-          },
-          "module": {
-            "type": "commonjs"
-          }
-        }
-      ]
-    },
-    "collectCoverageFrom": [
-      "src/**/*.ts",
-      "!src/main.ts"
-    ],
-    "coverageDirectory": "coverage"
   }
 }

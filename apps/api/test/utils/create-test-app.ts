@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/bootstrap/configure-app';
 import { loadConfig } from '../../src/config/env';
+import { TEST_DATABASE_URL } from './test-database';
 
 export const TEST_ORIGIN = 'http://localhost:3100';
 
@@ -16,6 +17,8 @@ export async function createTestApp(
     LOG_LEVEL: 'silent',
     CORS_ORIGINS: TEST_ORIGIN,
     APP_BASE_URL: TEST_ORIGIN,
+    // Prisma connects lazily: tests that never query do not need a running DB.
+    DATABASE_URL: TEST_DATABASE_URL,
     ...env,
   });
 

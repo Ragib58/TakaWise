@@ -6,3 +6,5 @@ coverage
 next-env.d.ts
 playwright-report
 test-results
+apps/api/src/generated
+apps/api/prisma/migrations/**/*.sql

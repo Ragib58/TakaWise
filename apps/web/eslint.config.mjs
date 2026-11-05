@@ -1,9 +1,10 @@
-import { base } from '@takawise/eslint-config/base';
+import { base, forbidServerOnlyImports } from '@takawise/eslint-config/base';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 
 const config = [
   ...nextVitals,
   ...base({ tsconfigRootDir: import.meta.dirname }),
+  forbidServerOnlyImports,
   {
     settings: { next: { rootDir: import.meta.dirname } },
   },

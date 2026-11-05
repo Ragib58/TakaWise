@@ -4,8 +4,8 @@ import { z } from 'zod';
  * Environment contract for the API. Parsed once at boot; the process refuses to
  * start on invalid configuration (fail fast, never run with unsafe defaults).
  *
- * Variables for later phases (DATABASE_URL, REDIS_URL, JWT_*, EMAIL_*, OBJECT_STORAGE_*)
- * become required in the phase that first uses them.
+ * Variables for later phases (REDIS_URL, JWT_*, EMAIL_*, OBJECT_STORAGE_*) become
+ * required in the phase that first uses them.
  */
 
 const booleanFlag = z
@@ -46,7 +46,11 @@ export const envSchema = z
       .default('info'),
     /** Max JSON body size accepted by the API. */
     BODY_LIMIT: z.string().default('100kb'),
-    DATABASE_URL: z.string().min(1).optional(),
+    /** PostgreSQL connection string (required from Phase 2). */
+    DATABASE_URL: z
+      .string()
+      .regex(/^postgres(?:ql)?:\/\/.+/, 'must be a postgres:// or postgresql:// URL'),
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
     REDIS_URL: z.string().min(1).optional(),
     /** ADR-017: print OTPs to the console. Development only — rejected otherwise. */
     DEV_LOG_OTP: booleanFlag,

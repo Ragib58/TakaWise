@@ -17,6 +17,27 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      # Fresh, throwaway database per run: migrations are verified from empty.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: takawise
+          POSTGRES_PASSWORD: takawise_ci_password
+          POSTGRES_DB: takawise_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U takawise -d takawise_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://takawise:takawise_ci_password@localhost:5432/takawise_test?schema=public
+      PRISMA_HIDE_UPDATE_MESSAGE: '1'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +48,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
-      - name: Install
+      - name: Install (also runs prisma generate)
         run: pnpm install --frozen-lockfile
 
       - name: Format check
@@ -39,7 +60,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
+      - name: Migrations are in sync with schema.prisma
+        working-directory: apps/api
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: |
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Test (unit, e2e, DB integration)
         run: pnpm test
 
       - name: Build

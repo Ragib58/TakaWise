@@ -55,6 +55,8 @@ pnpm install
 Copy-Item apps/api/.env.example apps/api/.env
 Copy-Item apps/web/.env.example apps/web/.env.local
 pnpm infra:up        # docker compose up -d --wait
+pnpm db:deploy       # apply migrations
+pnpm db:seed         # system categories + ledger templates
 pnpm dev             # contracts watcher + API + web
 ```
 
@@ -65,24 +67,32 @@ pnpm install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 pnpm infra:up
+pnpm db:deploy
+pnpm db:seed
 pnpm dev
 ```
 
-Then open http://localhost:3100 and http://localhost:4000/api/v1/health.
+Then open http://localhost:3100, http://localhost:4000/api/v1/health and http://localhost:4000/api/v1/health/ready.
 
 ## Scripts (repo root)
 
-| Script                          | What it does                                                      |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `pnpm dev`                      | Builds shared packages, then runs contracts/API/web in watch mode |
-| `pnpm dev:api` / `pnpm dev:web` | Run a single app                                                  |
-| `pnpm build`                    | Production build of every workspace                               |
-| `pnpm lint`                     | ESLint (type-aware) everywhere                                    |
-| `pnpm typecheck`                | `tsc --noEmit` everywhere                                         |
-| `pnpm test`                     | Vitest (contracts, web) + Jest (API unit and e2e)                 |
-| `pnpm format` / `format:check`  | Prettier                                                          |
-| `pnpm check`                    | Everything CI runs, in order                                      |
-| `pnpm infra:up` / `infra:down`  | Start or stop local PostgreSQL, Redis and Mailpit                 |
+| Script                                  | What it does                                                                              |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `pnpm dev`                              | Builds shared packages, then runs contracts/API/web in watch mode                         |
+| `pnpm dev:api` / `pnpm dev:web`         | Run a single app                                                                          |
+| `pnpm build`                            | Production build of every workspace                                                       |
+| `pnpm lint`                             | ESLint (type-aware) everywhere                                                            |
+| `pnpm typecheck`                        | `tsc --noEmit` everywhere                                                                 |
+| `pnpm test`                             | Vitest (contracts, web) + Jest (API unit, e2e and DB integration — needs `pnpm infra:up`) |
+| `pnpm --filter @takawise/api test:unit` | API tests that need no database                                                           |
+| `pnpm db:migrate`                       | Dev: create and apply a migration from `schema.prisma` changes                            |
+| `pnpm db:deploy` / `db:status`          | Apply pending migrations / show migration status                                          |
+| `pnpm db:seed`                          | Idempotent reference data (categories, ledger templates)                                  |
+| `pnpm db:studio`                        | Prisma Studio                                                                             |
+| `pnpm db:reset`                         | ⚠ Drops **all** local data, then re-migrates and seeds (dev only)                         |
+| `pnpm format` / `format:check`          | Prettier                                                                                  |
+| `pnpm check`                            | Everything CI runs, in order                                                              |
+| `pnpm infra:up` / `infra:down`          | Start or stop local PostgreSQL, Redis and Mailpit                                         |
 
 ## API conventions
 
@@ -92,6 +102,10 @@ Then open http://localhost:3100 and http://localhost:4000/api/v1/health.
 - Error: `{ "error": { "code", "message", "details": [{ "field", "message" }], "requestId" } }`
 - Every response carries an `X-Request-Id` header. A well-formed incoming one is reused.
 - Money is always sent as a **decimal string** (e.g. `"450.00"`), never a JSON number.
+
+## Database
+
+PostgreSQL via Prisma 7. Financial invariants are enforced **in the database as well as in services**: balanced journals, immutable posted history and cross-user foreign keys. See [docs/architecture/erd.md](docs/architecture/erd.md) for the ERD and the full constraint catalogue. DB integration tests run against `takawise_test` (override with `TEST_DATABASE_URL`, whose name must end in `_test`).
 
 ## Configuration
 

@@ -149,6 +149,7 @@ erDiagram
 | 016 | Single currency per transaction; same-currency transfers only; no FX in MVP            | Accepted |
 | 017 | Dev email via Mailpit; console OTP impossible in production                            | Accepted |
 | 018 | Toolchain versions: NestJS 11, TypeScript 6, ESLint 9, SWC compilation                 | Accepted |
+| 019 | Prisma 7 with pg driver adapter; DB-level invariants and composite ownership FKs       | Accepted |
 
 ---
 
@@ -210,13 +211,14 @@ Posted journals and lines are immutable: application code never updates or delet
 ### ADR-009 — Savings goals: earmark model _(Accepted 2026-11-05)_
 
 **Options:** (a) **earmark** against an existing account; (b) actual transfer into a dedicated savings account.
-**Decision:** (a) earmark. A goal links to one active asset account in the same currency. Contributions are positive records (no ledger journal). A withdrawal is a contribution reversal row. Progress = Σ non-reversed contributions. A contribution is rejected if Σ earmarks across that account's goals would exceed its current ledger balance. If the balance later falls below the earmarks, the UI warns ("under-funded"), and no automatic changes are made. Goal amounts cannot be edited directly.
+**Decision:** (a) earmark. A goal links to one active asset account in the same currency. `goal_contributions` is append-only, with no ledger journal. Each row has a positive `amount` and a `kind`: `CONTRIBUTION` (set money aside), `WITHDRAWAL` (release money) or `REVERSAL` (corrects one earlier row, with the same amount and once only). Progress = Σ CONTRIBUTION − Σ WITHDRAWAL over rows that are `POSTED` and not reversed. _(Refined in Phase 2: the original wording "a withdrawal is a reversal row" conflated two different user intents.)_ A contribution is rejected if Σ earmarks across that account's goals would exceed its current ledger balance. If the balance later falls below the earmarks, the UI warns ("under-funded"), and no automatic changes are made. Goal amounts cannot be edited directly.
 **Why:** No artificial money movement, no extra account the user doesn't actually have, and it fits the common Bangladesh pattern of "this bank balance is for X". Users who actually keep a separate savings account can link the goal to that account, which gives the same result as (b).
 **UI copy (required):** "Goal savings are set aside from {account}. No money is moved."
 
 ### ADR-010 — Corrections by reversal _(Accepted 2026-11-05)_
 
 **Decision:** Posted transactions and transfers are never edited or deleted. `POST /transactions/:id/reverse` creates a REVERSAL journal with every line swapped, `reversesId` set to the original, and **the same effectiveDate as the original**. The original is marked `REVERSED`, and both remain visible in history. A journal can be reversed only once, and reversal journals cannot themselves be reversed (409). The UI's "Edit" action means reverse and create a replacement, done in one idempotent request (`/transactions/:id/replace`, Phase 4 stretch).
+**Non-financial notes:** the free-text `description` of a posted transaction or transfer may be edited, because it changes no amounts, accounts or dates. The database allows only that field and the `POSTED → REVERSED` transition (see [erd.md](erd.md)).
 **Why the same date:** For personal finance, the user is fixing a mistake, so the original month's report should change. Budgets and reports exclude both the reversed original and its reversal.
 **Alternative:** date the reversal "today" (traditional accounting). Rejected for the MVP because it distorts past-month reports.
 
@@ -246,7 +248,7 @@ Posted journals and lines are immutable: application code never updates or delet
 
 ### ADR-015 — Testing strategy
 
-**Decision:** Integration tests run against a real PostgreSQL (`takawise_test`, from Compose locally and service containers in CI), and each test file gets a fresh schema via truncate. Ledger rules use unit tests plus randomized balanced/unbalanced journal generation. The API uses Jest + Supertest, web and contracts use Vitest, and E2E uses Playwright at desktop and mobile viewports. Coverage gates apply to the `ledger`, `transactions`, `budgets` and `auth` modules.
+**Decision:** Integration tests run against a real PostgreSQL (`takawise_test`, from Compose locally and a fresh service container in CI). Before the DB suite, Jest global setup runs `prisma migrate deploy` and the idempotent seed. **Nothing is reset or truncated.** Every test creates its own users (random emails), so files run in parallel and never see each other's data. A guard refuses any test database whose name does not end in `_test`. _(Refined in Phase 2: truncating was dropped. Isolated fixtures are safer, and Prisma 7 also blocks agent-run `migrate reset` without explicit human consent.)_ Ledger rules use unit tests plus randomized balanced/unbalanced journal generation. The API uses Jest + Supertest, web and contracts use Vitest, and E2E uses Playwright at desktop and mobile viewports. Coverage gates apply to the `ledger`, `transactions`, `budgets` and `auth` modules.
 
 ### ADR-016 — Currency
 
@@ -278,3 +280,16 @@ Posted journals and lines are immutable: application code never updates or delet
 - pnpm 10 dependency build scripts are allow-listed (`@swc/core`, `@parcel/watcher`), and analytics postinstalls (`@scarf/scarf`) are denied.
 
 **Consequences:** All pins are exact in the package manifests and the lockfile. Upgrading any of the three majors is a deliberate, separately tested change.
+
+### ADR-019 — Prisma 7 and database-level invariants (Phase 2, 2026-11-05)
+
+**Context:** npm's `latest` tag for `prisma` pointed at a release candidate (8.0.0-rc) at Phase 2 time. Prisma 7 is ESM-first, needs a driver adapter, and moves connection URLs out of `schema.prisma`.
+**Decision:**
+
+- **Prisma 7.10.1** (the last stable release), pinned exactly, with `@prisma/adapter-pg`. The `prisma-client` generator emits a **CommonJS** client into `apps/api/src/generated/prisma`. The client is git-ignored and regenerated by the API's `postinstall`.
+- The connection URL lives in `apps/api/prisma.config.ts` (which loads `apps/api/.env` locally). The API builds clients through `createPrismaClient()` and `PrismaService`, which connect lazily so `/health` stays up while `/health/ready` reports the database as down.
+- **Defence in depth:** every financial rule is enforced in SQL as well as in services. This covers CHECKs, a deferred balanced-journal constraint trigger, immutability triggers, category and currency consistency triggers, and partial unique indexes. Ownership is also enforced in SQL through **composite foreign keys** `(child.x_id, child.user_id) → parent(id, user_id)`. A bug that forgets a `userId` filter therefore cannot link two users' records. See [erd.md](erd.md) for the full catalogue.
+- Prisma does not model these SQL objects, so they live in a hand-written migration. CI proves there is no drift with `prisma migrate diff --exit-code`.
+- `prisma init` is not used inside the repo, because it adds agent-tooling folders. Destructive Prisma commands (`migrate reset`) are only ever run by a human.
+
+**Consequences:** Upgrading Prisma (including to 8.x) is a deliberate, separately tested change. Raw SQL objects must be kept in step with schema changes. The DB suite catches any divergence.

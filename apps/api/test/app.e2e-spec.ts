@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { Paginated } from '../src/common/envelope/paginated';
 import { AppException } from '../src/common/errors/app.exception';
 import { createTestApp, TEST_ORIGIN } from './utils/create-test-app';
+import { UNREACHABLE_DATABASE_URL } from './utils/test-database';
 
 class EchoDto extends createZodDto(
   z.object({
@@ -215,5 +216,24 @@ describe('API foundation in production mode (e2e)', () => {
       .get('/api/v1/health')
       .expect(200);
     expect(res.headers['content-security-policy']).toBeDefined();
+  });
+});
+
+describe('readiness without a database (e2e)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createTestApp({ DATABASE_URL: UNREACHABLE_DATABASE_URL });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('liveness stays up while readiness reports SERVICE_UNAVAILABLE', async () => {
+    const server = app.getHttpServer() as App;
+    await request(server).get('/api/v1/health').expect(200);
+    const res = await request(server).get('/api/v1/health/ready').expect(503);
+    expect(apiErrorEnvelopeSchema.parse(res.body).error.code).toBe('SERVICE_UNAVAILABLE');
   });
 });

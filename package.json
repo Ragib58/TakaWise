@@ -20,6 +20,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:migrate": "pnpm --filter @takawise/api run db:migrate",
+    "db:deploy": "pnpm --filter @takawise/api run db:deploy",
+    "db:seed": "pnpm --filter @takawise/api run db:seed",
+    "db:status": "pnpm --filter @takawise/api run db:status",
+    "db:studio": "pnpm --filter @takawise/api run db:studio",
+    "db:reset": "pnpm --filter @takawise/api run db:reset",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f"

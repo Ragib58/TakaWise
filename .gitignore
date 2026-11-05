@@ -39,3 +39,9 @@ Thumbs.db
 
 # Next.js generated types (recreated by next dev/build/typegen)
 next-env.d.ts
+
+# Prisma generated client (recreated by `prisma generate` on install)
+apps/api/src/generated/
+
+# scratch output
+*.tmp

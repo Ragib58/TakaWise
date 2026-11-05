@@ -6,6 +6,9 @@ packages:
 onlyBuiltDependencies:
   - '@swc/core'
   - '@parcel/watcher'
+  - '@prisma/engines'
+  - prisma
+  - esbuild
 
 # Telemetry/analytics postinstall scripts are explicitly denied.
 ignoredBuiltDependencies:
