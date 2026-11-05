@@ -36,3 +36,6 @@ Thumbs.db
 
 # misc
 *.pem
+
+# Next.js generated types (recreated by next dev/build/typegen)
+next-env.d.ts

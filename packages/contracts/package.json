@@ -1,0 +1,35 @@
+{
+  "name": "@takawise/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API-safe Zod schemas and types shared by apps/web and apps/api",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@takawise/eslint-config": "workspace:*",
+    "@takawise/tsconfig": "workspace:*",
+    "@types/node": "24.19.2",
+    "eslint": "9.39.5",
+    "typescript": "~6.0.3",
+    "vitest": "5.1.0"
+  }
+}
