@@ -14,6 +14,7 @@ import { ProgressBar } from '@/components/ui/progress';
 import { Select } from '@/components/ui/select';
 import { ApiError } from '@/lib/api-client';
 import { formatDate, formatMoney } from '@/lib/format';
+import { useT } from '@/lib/i18n/use-t';
 import {
   useAccounts,
   useContribute,
@@ -30,12 +31,13 @@ const errorText = (e: unknown) =>
 
 export function GoalsView() {
   const session = useSession();
+  const t = useT();
   const locale = session.status === 'authenticated' ? session.user.profile.locale : 'en';
   const goals = useGoals();
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Savings goals</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t('dashboard.goals')}</h1>
       <p className="text-sm text-muted-foreground">
         Goal savings are set aside from an account you choose. No money is moved — your account
         balance stays the same.

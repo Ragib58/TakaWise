@@ -45,7 +45,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: CORS_ALLOWED_HEADERS,
-    exposedHeaders: ['X-Request-Id', 'Idempotent-Replayed'],
+    exposedHeaders: ['X-Request-Id', 'Idempotent-Replayed', 'Content-Disposition'],
     maxAge: 600,
   });
 

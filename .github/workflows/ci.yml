@@ -86,3 +86,86 @@ jobs:
 
       - name: Validate docker-compose.yml
         run: docker compose config --quiet
+
+  e2e:
+    name: End-to-end (Playwright)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: takawise
+          POSTGRES_PASSWORD: takawise_ci_password
+          POSTGRES_DB: takawise_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U takawise -d takawise_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports:
+          - 1035:1025
+          - 8035:8025
+
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://takawise:takawise_ci_password@localhost:5432/takawise_e2e?schema=public
+      REDIS_URL: redis://localhost:6379
+      SMTP_URL: smtp://localhost:1035
+      CORS_ORIGINS: http://localhost:3100
+      APP_BASE_URL: http://localhost:3100
+      LOG_LEVEL: warn
+      PRISMA_HIDE_UPDATE_MESSAGE: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate throwaway auth secrets
+        run: |
+          echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+          echo "AUTH_HMAC_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
+      - name: Migrate and seed
+        working-directory: apps/api
+        run: |
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma db seed
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browser
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E (servers started by Playwright)
+        working-directory: apps/web
+        run: pnpm e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

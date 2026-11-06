@@ -2,24 +2,28 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { APP_NAV } from '@/config/navigation';
+import { APP_NAV, type NavItem } from '@/config/navigation';
+import { useT } from '@/lib/i18n/use-t';
 import { cn } from '@/lib/utils';
 
-function isActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: NavItem): boolean {
+  const base = item.match ?? item.href;
+  return pathname === base || pathname.startsWith(`${base}/`);
 }
 
 /** Desktop sidebar navigation. */
 export function SidebarNav() {
   const pathname = usePathname();
+  const t = useT();
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
-      {APP_NAV.map(({ href, label, icon: Icon }) => {
-        const active = isActive(pathname, href);
+      {APP_NAV.map((item) => {
+        const active = isActive(pathname, item);
+        const Icon = item.icon;
         return (
           <Link
-            key={href}
-            href={href}
+            key={item.href}
+            href={item.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -29,7 +33,7 @@ export function SidebarNav() {
             )}
           >
             <Icon aria-hidden className="size-4" />
-            {label}
+            {t(item.labelKey)}
           </Link>
         );
       })}
@@ -40,18 +44,20 @@ export function SidebarNav() {
 /** Mobile bottom navigation (blueprint §9.4). */
 export function BottomNav() {
   const pathname = usePathname();
+  const t = useT();
   return (
     <nav
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <ul className="grid grid-cols-5">
-        {APP_NAV.filter((item) => item.mobile).map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
+        {APP_NAV.filter((item) => item.mobile).map((item) => {
+          const active = isActive(pathname, item);
+          const Icon = item.icon;
           return (
-            <li key={href}>
+            <li key={item.href}>
               <Link
-                href={href}
+                href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex flex-col items-center gap-1 py-2 text-[11px] font-medium',
@@ -59,7 +65,7 @@ export function BottomNav() {
                 )}
               >
                 <Icon aria-hidden className="size-5" />
-                {label}
+                {t(item.labelKey)}
               </Link>
             </li>
           );

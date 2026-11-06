@@ -45,7 +45,8 @@ export type AuditAction =
   | 'reminder.created'
   | 'reminder.updated'
   | 'reminder.completed'
-  | 'reminder.cancelled';
+  | 'reminder.cancelled'
+  | 'export.transactions';
 
 export type AuditEvent = {
   action: AuditAction;

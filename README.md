@@ -104,6 +104,18 @@ Then open http://localhost:3100, http://localhost:4000/api/v1/health and http://
 - Money is always sent as a **decimal string** (e.g. `"450.00"`), never a JSON number.
 - Financial commands (`POST /accounts`, `/transactions`, `/transfers`, `…/reverse`, goal contributions) require an `Idempotency-Key: <uuid>` header. See [docs/api/ledger.md](docs/api/ledger.md) for posting rules, balances and errors.
 - Budgets, savings goals (earmark model), reminders, notifications and background jobs: [docs/api/planning.md](docs/api/planning.md).
+- Dashboard, reports and CSV export: [docs/api/reports.md](docs/api/reports.md).
+
+## End-to-end tests
+
+Playwright drives the real stack (web → API → PostgreSQL/Redis) and reads verification codes from Mailpit:
+
+```bash
+pnpm infra:up && pnpm db:deploy && pnpm db:seed
+pnpm build
+pnpm --filter @takawise/web exec playwright install chromium   # first time only
+pnpm --filter @takawise/web e2e    # starts API + web unless already running
+```
 
 ## Database
 

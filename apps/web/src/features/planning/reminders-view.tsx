@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
+import { useT } from '@/lib/i18n/use-t';
 import { cn } from '@/lib/utils';
 import {
   useCreateReminder,
@@ -27,6 +28,7 @@ const VIEWS = [
 
 export function RemindersView() {
   const session = useSession();
+  const t = useT();
   const locale = session.status === 'authenticated' ? session.user.profile.locale : 'en';
   const [view, setView] = useState<(typeof VIEWS)[number]['id']>('upcoming');
   const reminders = useReminders(view);
@@ -34,7 +36,7 @@ export function RemindersView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Reminders</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t('nav.reminders')}</h1>
       <div
         role="tablist"
         aria-label="Reminder views"
@@ -192,6 +194,7 @@ function CreateReminderForm() {
 
 export function NotificationsView() {
   const session = useSession();
+  const t = useT();
   const locale = session.status === 'authenticated' ? session.user.profile.locale : 'en';
   const timezone =
     session.status === 'authenticated' ? session.user.profile.timezone : 'Asia/Dhaka';
@@ -201,7 +204,7 @@ export function NotificationsView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('nav.notifications')}</h1>
         <Button
           variant="outline"
           size="sm"

@@ -13,10 +13,12 @@ import { ProgressBar } from '@/components/ui/progress';
 import { Select } from '@/components/ui/select';
 import { ApiError } from '@/lib/api-client';
 import { currentMonth, formatMoney, formatMonth, shiftMonth } from '@/lib/format';
+import { useT } from '@/lib/i18n/use-t';
 import { useArchiveBudget, useBudgets, useCategories, useCreateBudget } from './queries';
 
 export function BudgetsView() {
   const session = useSession();
+  const t = useT();
   const locale = session.status === 'authenticated' ? session.user.profile.locale : 'en';
   const timezone =
     session.status === 'authenticated' ? session.user.profile.timezone : 'Asia/Dhaka';
@@ -26,7 +28,7 @@ export function BudgetsView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Budgets</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('nav.budgets')}</h1>
         <div className="flex items-center gap-1" role="group" aria-label="Choose month">
           <Button
             variant="outline"

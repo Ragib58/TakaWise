@@ -32,6 +32,13 @@ import { RemindersService } from './reminders/reminders.service';
     BackgroundJobsService,
     RedisHealth,
   ],
-  exports: [RedisHealth, ReminderDispatcher, BackgroundJobsService],
+  exports: [
+    RedisHealth,
+    ReminderDispatcher,
+    BackgroundJobsService,
+    BudgetsService,
+    GoalsService,
+    RemindersService,
+  ],
 })
 export class PlanningModule {}

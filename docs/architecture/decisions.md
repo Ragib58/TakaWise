@@ -150,6 +150,7 @@ erDiagram
 | 017 | Dev email via Mailpit; console OTP impossible in production                            | Accepted |
 | 018 | Toolchain versions: NestJS 11, TypeScript 6, ESLint 9, SWC compilation                 | Accepted |
 | 019 | Prisma 7 with pg driver adapter; DB-level invariants and composite ownership FKs       | Accepted |
+| 020 | UI localisation (typed dictionary), money/date formatting, accessible charts           | Accepted |
 
 ---
 
@@ -319,3 +320,15 @@ Posted journals and lines are immutable: application code never updates or delet
 - `prisma init` is not used inside the repo, because it adds agent-tooling folders. Destructive Prisma commands (`migrate reset`) are only ever run by a human.
 
 **Consequences:** Upgrading Prisma (including to 8.x) is a deliberate, separately tested change. Raw SQL objects must be kept in step with schema changes. The DB suite catches any divergence.
+
+### ADR-020 — UI localisation and charts (Phase 6, 2026-11-06)
+
+**Context:** The blueprint asks for Bangla and English with locale-aware money and dates. The plan had named `next-intl`.
+**Decision:**
+
+- The signed-in app uses a small **typed dictionary** (`apps/web/src/lib/i18n/messages.ts`) and `useT()`. Locale comes from the user's profile and is changed in Settings → Preferences. Every English key has a Bangla value, which the type and a unit test enforce, and placeholders must match between the two.
+  - We chose this over `next-intl` because the app is client-rendered behind auth and the locale is per user rather than per URL, so a dependency and routing changes were not needed.
+- Money is formatted with `Intl.NumberFormat` from the API's **decimal strings**, so values are never parsed into floats for arithmetic. `bn-BD` gives Bangla digits and lakh grouping. Dates are formatted in the user's time zone.
+- Charts use **Recharts** and are hidden from assistive technology (`aria-hidden`). The same numbers are always available as a real table (sr-only, plus a visible "Show as table" toggle). Status is never shown by colour alone: signs, labels and icons are used too.
+
+**Known gap:** auth and public pages (register, login, marketing) are English-only for now, because no user locale exists before sign-in. Adding a visitor language switch (cookie) is follow-up work. Bangla copy needs native-speaker review before launch.

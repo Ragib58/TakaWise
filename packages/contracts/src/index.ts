@@ -4,6 +4,7 @@ export * from './auth';
 export * from './ledger';
 export * from './money';
 export * from './planning';
+export * from './reports';
 
 /** Versioned base path for all API routes. */
 export const API_PREFIX = 'api/v1';

@@ -6,9 +6,11 @@ import { useState } from 'react';
 import { useSession } from '@/components/auth/auth-provider';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/lib/auth/auth-api';
+import { useT } from '@/lib/i18n/use-t';
 
 export function UserMenu() {
   const session = useSession();
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   if (session.status !== 'authenticated') return null;
@@ -29,7 +31,7 @@ export function UserMenu() {
       </span>
       <Button variant="ghost" size="sm" disabled={busy} onClick={() => void onLogout()}>
         <LogOut aria-hidden />
-        Log out
+        {t('nav.logout')}
       </Button>
     </div>
   );

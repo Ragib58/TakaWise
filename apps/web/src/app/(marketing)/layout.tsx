@@ -10,6 +10,17 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
           <Link href="/" className="text-lg font-bold tracking-tight text-primary">
             TakaWise
           </Link>
+          <nav aria-label="Site" className="hidden items-center gap-4 text-sm sm:flex">
+            <Link href="/features" className="text-muted-foreground hover:text-foreground">
+              Features
+            </Link>
+            <Link href="/pricing" className="text-muted-foreground hover:text-foreground">
+              Pricing
+            </Link>
+            <Link href="/help" className="text-muted-foreground hover:text-foreground">
+              Help
+            </Link>
+          </nav>
           <nav aria-label="Account" className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link href="/login">Log in</Link>
@@ -21,9 +32,17 @@ export default function MarketingLayout({ children }: Readonly<{ children: React
         </div>
       </header>
       <main className="flex-1">{children}</main>
-      <footer className="border-t py-6 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} TakaWise · A personal recordkeeping and planning tool — not a
-        bank, wallet or financial adviser.
+      <footer className="flex flex-col gap-2 border-t py-6 text-center text-sm text-muted-foreground">
+        <nav aria-label="Footer" className="flex justify-center gap-4">
+          <Link href="/about">About</Link>
+          <Link href="/help">Help</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+        </nav>
+        <p>
+          © {new Date().getFullYear()} TakaWise · A personal recordkeeping and planning tool — not a
+          bank, wallet or financial adviser.
+        </p>
       </footer>
     </div>
   );
