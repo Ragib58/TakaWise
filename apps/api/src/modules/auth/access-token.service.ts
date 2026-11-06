@@ -31,11 +31,23 @@ export class AccessTokenService {
     return { token, expiresAt: new Date(Date.now() + ttl * 1000) };
   }
 
-  /** Returns the claims, or null for any invalid/expired/tampered token. */
+  /**
+   * Returns the claims, or null for any invalid/expired/tampered token. Tokens
+   * signed with JWT_ACCESS_SECRET_PREVIOUS stay valid during a key rotation.
+   */
   verify(token: string): { userId: string; sessionId: string } | null {
+    for (const secret of [this.config.JWT_ACCESS_SECRET, this.config.JWT_ACCESS_SECRET_PREVIOUS]) {
+      if (!secret) continue;
+      const claims = this.verifyWith(token, secret);
+      if (claims) return claims;
+    }
+    return null;
+  }
+
+  private verifyWith(token: string, secret: string): { userId: string; sessionId: string } | null {
     try {
       const claims = this.jwt.verify<Partial<AccessTokenClaims>>(token, {
-        secret: this.config.JWT_ACCESS_SECRET,
+        secret,
         algorithms: ['HS256'],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,

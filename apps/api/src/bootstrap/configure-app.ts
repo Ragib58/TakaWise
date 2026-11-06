@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
+import { MetricsService } from '../common/metrics/metrics.service';
 import type { AppConfig } from '../config/env';
 
 export const SWAGGER_PATH = 'api/docs';
@@ -28,6 +29,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.disable('x-powered-by');
   // Only trust X-Forwarded-* from a known number of proxy hops (client IP for audit/rate limits).
   app.set('trust proxy', config.TRUST_PROXY);
+  app.use(app.get(MetricsService).middleware());
   app.use(cookieParser());
   app.setGlobalPrefix(API_PREFIX);
   app.useBodyParser('json', { limit: config.BODY_LIMIT });

@@ -75,7 +75,8 @@ export class RemindersService {
       Object.assign(where, { status: { in: ['DONE', 'CANCELLED'] } });
       orderBy = { dueAt: 'desc' };
     }
-    const [total, rows] = await this.prisma.$transaction([
+    // Separate, parallel reads: no transaction holding a pooled connection.
+    const [total, rows] = await Promise.all([
       this.prisma.reminder.count({ where }),
       this.prisma.reminder.findMany({
         where,

@@ -3,9 +3,10 @@ import {
   Injectable,
   Logger,
   type OnApplicationBootstrap,
-  type OnApplicationShutdown,
+  type OnModuleDestroy,
 } from '@nestjs/common';
 import { type ConnectionOptions, Queue, Worker } from 'bullmq';
+import { sanitizeForLog } from '../../common/errors/all-exceptions.filter';
 import { APP_CONFIG } from '../../config/config.module';
 import type { AppConfig } from '../../config/env';
 import { IdempotencyService } from '../idempotency/idempotency.service';
@@ -27,7 +28,7 @@ type JobName = (typeof JOB_SCHEDULES)[number]['name'];
  * Disabled with WORKER_ENABLED=false (tests) or when REDIS_URL is unset (dev).
  */
 @Injectable()
-export class BackgroundJobsService implements OnApplicationBootstrap, OnApplicationShutdown {
+export class BackgroundJobsService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(BackgroundJobsService.name);
   private queue?: Queue;
   private worker?: Worker;
@@ -46,7 +47,7 @@ export class BackgroundJobsService implements OnApplicationBootstrap, OnApplicat
     }
     // Never block startup on Redis; readiness reports it if unavailable.
     this.start(this.config.REDIS_URL).catch((err: unknown) => {
-      this.logger.error({ err }, 'Failed to start background jobs');
+      this.logger.error({ err: sanitizeForLog(err) }, 'Failed to start background jobs');
     });
   }
 
@@ -57,7 +58,8 @@ export class BackgroundJobsService implements OnApplicationBootstrap, OnApplicat
     return schedulers.map((s) => s.key).sort();
   }
 
-  async onApplicationShutdown(): Promise<void> {
+  /** Stop taking jobs and let a running one finish before the database disconnects. */
+  async onModuleDestroy(): Promise<void> {
     await this.worker?.close();
     await this.queue?.close();
   }
@@ -93,7 +95,7 @@ export class BackgroundJobsService implements OnApplicationBootstrap, OnApplicat
       concurrency: 1,
     });
     this.worker.on('failed', (job, err) => {
-      this.logger.error({ err, job: job?.name }, 'Background job failed');
+      this.logger.error({ err: sanitizeForLog(err), job: job?.name }, 'Background job failed');
     });
     this.logger.log(`Background jobs started: ${JOB_SCHEDULES.map((s) => s.name).join(', ')}`);
   }

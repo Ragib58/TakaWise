@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+**/*.tmp
+**/*.log
+.git
+.github
+.vscode
+.idea
+# Never send local secrets into an image build context.
+**/.env
+**/.env.*
+!**/.env.example

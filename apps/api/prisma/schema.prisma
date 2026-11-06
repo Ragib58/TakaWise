@@ -350,6 +350,8 @@ model JournalLine {
 
   @@index([journalEntryId])
   @@index([ledgerAccountId])
+  /// Created with INCLUDE (debit, credit) for index-only balance sums (read_performance migration).
+  @@index([ledgerAccountId, debit, credit], map: "journal_lines_ledger_account_amounts_idx")
   @@map("journal_lines")
 }
 
@@ -388,6 +390,10 @@ model Transaction {
   @@index([userId, accountId, effectiveDate])
   @@index([userId, categoryId, effectiveDate])
   @@index([userId, status])
+  /// Created with INCLUDE (status, currency, category_id, amount) (read_performance migration).
+  @@index([userId, type, effectiveDate, status, currency, categoryId, amount], map: "transactions_reporting_idx")
+  /// Trigram GIN for ILIKE description search; needs the pg_trgm extension.
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "transactions_description_trgm_idx")
   @@map("transactions")
 }
 

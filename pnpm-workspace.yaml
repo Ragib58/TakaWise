@@ -11,6 +11,11 @@ onlyBuiltDependencies:
   - esbuild
 
 # Telemetry/analytics postinstall scripts are explicitly denied.
+# Security overrides (docs/security/dependency-audit.md).
+overrides:
+  # GHSA (DoS via pending fileFilter); @nestjs/platform-express pins 2.4.0.
+  multer: 2.5.0
+
 ignoredBuiltDependencies:
   - '@scarf/scarf'
   # Optional native accelerator for bullmq; prebuilt binaries are used when available.

@@ -332,3 +332,19 @@ Posted journals and lines are immutable: application code never updates or delet
 - Charts use **Recharts** and are hidden from assistive technology (`aria-hidden`). The same numbers are always available as a real table (sr-only, plus a visible "Show as table" toggle). Status is never shown by colour alone: signs, labels and icons are used too.
 
 **Known gap:** auth and public pages (register, login, marketing) are English-only for now, because no user locale exists before sign-in. Adding a visitor language switch (cookie) is follow-up work. Bangla copy needs native-speaker review before launch.
+
+### ADR-021 — Release hardening & operations (Phase 7, 2026-11-06)
+
+**Context:** The MVP release needs production-grade security controls, observability, backups and a delivery pipeline without picking a final cloud account yet.
+**Decision:**
+
+- **Rate limits use Redis storage** (atomic Lua INCR+PEXPIRE, block keys) so limits hold across API instances; if Redis errors, the limiter falls back to in-memory per-instance counting instead of failing open or closed.
+- **Metrics:** `prom-client` on a private registry at `GET /api/v1/metrics`, labelled by route **template** only (no ids, no user data). Bearer `METRICS_TOKEN`; without a token the endpoint is 404 in production.
+- **Log redaction:** pino redact paths plus `sanitizeForLog()`, which strips Prisma/driver error messages (they can echo parameter values) to name + code.
+- **JWT rotation:** `JWT_ACCESS_SECRET_PREVIOUS` is accepted for verification only, so keys rotate with zero forced logouts.
+- **Web CSP** via Next headers: `default-src 'self'`, `frame-ancestors 'none'`, `connect-src` limited to the API origin. `script-src` still allows `'unsafe-inline'` (Next bootstrap); upgrading to nonces is tracked in [security/endpoint-review.md](../security/endpoint-review.md).
+- **Graceful shutdown order:** the job worker closes in `onModuleDestroy`, Prisma disconnects in `onApplicationShutdown`.
+- **List endpoints** run count + page queries in parallel, not inside a `$transaction`, to avoid idle-in-transaction pool starvation. Covering and trigram indexes back reports and search (ADR-004 projections stay deferred; see [ops/load-test.md](../ops/load-test.md)).
+- **Delivery:** multi-stage, non-root Docker images (API, migrator, web standalone) with npm removed from runtime layers; CI adds `pnpm audit`, gitleaks and Trivy; `deploy.yml` (GHCR → staging + smoke → manual-approval production) is gated by `DEPLOY_ENABLED` until a target is provisioned (AWS per blueprint §12, [runbooks/deployment.md](../runbooks/deployment.md)).
+
+**Consequences:** The load test showed PostgreSQL CPU is the first bottleneck; the dashboard query consolidation and monthly projections are the next performance levers. Runbooks live in `docs/runbooks/`; the acceptance checklist is [mvp-acceptance.md](../mvp-acceptance.md).

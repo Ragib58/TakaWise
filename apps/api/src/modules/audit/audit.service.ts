@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { sanitizeForLog } from '../../common/errors/all-exceptions.filter';
 import type { ClientContext } from '../../common/http/client-context';
 import { APP_CONFIG } from '../../config/config.module';
 import type { AppConfig } from '../../config/env';
@@ -95,7 +96,10 @@ export class AuditService {
     try {
       await this.record(event, client);
     } catch (err) {
-      this.logger.error({ err, action: event.action }, 'Failed to write audit log');
+      this.logger.error(
+        { err: sanitizeForLog(err), action: event.action },
+        'Failed to write audit log',
+      );
     }
   }
 }

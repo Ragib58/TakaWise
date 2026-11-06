@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { sanitizeForLog } from '../../common/errors/all-exceptions.filter';
 import type {
   AuthSessionResponse,
   LoginRequest,
@@ -330,7 +331,7 @@ export class AuthService {
     try {
       await this.email.send(message);
     } catch (err) {
-      this.logger.error({ err }, 'Failed to send email');
+      this.logger.error({ err: sanitizeForLog(err) }, 'Failed to send email');
     }
   }
 }

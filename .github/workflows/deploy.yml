@@ -1,0 +1,105 @@
+name: Deploy
+
+# Staging deploys automatically after CI passes on main; production needs a
+# manual approval (GitHub environment "production" with required reviewers).
+# Nothing runs until the repository variable DEPLOY_ENABLED is "true" and the
+# environments below are configured (docs/runbooks/deployment.md).
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # OIDC to the cloud provider; no long-lived keys in GitHub
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & push images
+    if: vars.DEPLOY_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - id: tag
+        run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push API + migrator
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build -f infra/docker/api.Dockerfile -t "$repo-api:${{ steps.tag.outputs.tag }}" .
+          docker build -f infra/docker/api.Dockerfile --target migrator -t "$repo-migrator:${{ steps.tag.outputs.tag }}" .
+          docker push "$repo-api:${{ steps.tag.outputs.tag }}"
+          docker push "$repo-migrator:${{ steps.tag.outputs.tag }}"
+
+  staging:
+    name: Deploy staging
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push web (staging API URL is compiled in)
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f infra/docker/web.Dockerfile --build-arg NEXT_PUBLIC_API_BASE_URL="${{ vars.API_URL }}/api/v1" \
+            -t "$repo-web:${{ needs.publish.outputs.tag }}-staging" .
+          docker push "$repo-web:${{ needs.publish.outputs.tag }}-staging"
+      - name: Migrate (expand-only migrations; see runbook)
+        run: ./infra/scripts/deploy.sh migrate "${{ needs.publish.outputs.tag }}"
+        env:
+          DEPLOY_TARGET: staging
+      - name: Roll out
+        run: ./infra/scripts/deploy.sh rollout "${{ needs.publish.outputs.tag }}"
+        env:
+          DEPLOY_TARGET: staging
+      - name: Smoke test
+        run: ./infra/scripts/smoke.sh
+        env:
+          API_URL: ${{ vars.API_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+
+  production:
+    name: Deploy production (manual approval)
+    needs: [publish, staging]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push web (production API URL)
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f infra/docker/web.Dockerfile --build-arg NEXT_PUBLIC_API_BASE_URL="${{ vars.API_URL }}/api/v1" \
+            -t "$repo-web:${{ needs.publish.outputs.tag }}-production" .
+          docker push "$repo-web:${{ needs.publish.outputs.tag }}-production"
+      - name: Snapshot database before migrating
+        run: ./infra/scripts/deploy.sh snapshot "${{ needs.publish.outputs.tag }}"
+        env:
+          DEPLOY_TARGET: production
+      - name: Migrate
+        run: ./infra/scripts/deploy.sh migrate "${{ needs.publish.outputs.tag }}"
+        env:
+          DEPLOY_TARGET: production
+      - name: Roll out
+        run: ./infra/scripts/deploy.sh rollout "${{ needs.publish.outputs.tag }}"
+        env:
+          DEPLOY_TARGET: production
+      - name: Smoke test
+        run: ./infra/scripts/smoke.sh
+        env:
+          API_URL: ${{ vars.API_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}

@@ -65,6 +65,31 @@ function zodDetails(error: ZodError): ApiErrorDetail[] {
   });
 }
 
+/**
+ * What may be logged about an unexpected error. Prisma error messages can echo
+ * query arguments (amounts, descriptions, emails), so for those only the error
+ * class, code and model are kept (NFR: redact sensitive payloads).
+ */
+export function sanitizeForLog(exception: unknown): {
+  name: string;
+  message: string;
+  code?: string;
+  model?: string;
+  stack?: string;
+} {
+  if (!(exception instanceof Error)) return { name: 'NonError', message: 'Non-error thrown' };
+  if (exception.name.startsWith('PrismaClient') || exception.name === 'DriverAdapterError') {
+    const e = exception as Error & { code?: unknown; meta?: { modelName?: unknown } };
+    return {
+      name: exception.name,
+      message: 'Database error (details redacted)',
+      code: typeof e.code === 'string' ? e.code : undefined,
+      model: typeof e.meta?.modelName === 'string' ? e.meta.modelName : undefined,
+    };
+  }
+  return { name: exception.name, message: exception.message.slice(0, 500), stack: exception.stack };
+}
+
 /** Errors thrown by Express middleware (e.g. body-parser) carry a numeric status. */
 function middlewareStatus(exception: unknown): number | undefined {
   if (typeof exception !== 'object' || exception === null) return undefined;
@@ -117,10 +142,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      this.logger.error(
-        { err: exception, requestId },
-        exception instanceof Error ? exception.message : 'Non-error thrown',
-      );
+      const err = sanitizeForLog(exception);
+      this.logger.error({ err, requestId }, err.message);
     }
 
     if (res.headersSent) return;

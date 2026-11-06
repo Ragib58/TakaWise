@@ -32,7 +32,8 @@ export class NotificationsService {
           ? { readAt: { not: null } }
           : {}),
     };
-    const [total, rows] = await this.prisma.$transaction([
+    // Separate, parallel reads: no transaction holding a pooled connection.
+    const [total, rows] = await Promise.all([
       this.prisma.notification.count({ where }),
       this.prisma.notification.findMany({
         where,

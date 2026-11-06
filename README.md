@@ -117,6 +117,15 @@ pnpm --filter @takawise/web exec playwright install chromium   # first time only
 pnpm --filter @takawise/web e2e    # starts API + web unless already running
 ```
 
+## Release & operations
+
+- **Images:** `docker build -f infra/docker/api.Dockerfile -t takawise-api .` (add `--target migrator` for the migration image) and `docker build -f infra/docker/web.Dockerfile --build-arg NEXT_PUBLIC_API_BASE_URL=… -t takawise-web .`. Both run as non-root with health checks.
+- **CI scans:** `pnpm audit --prod`, gitleaks (secrets) and Trivy (images). Decisions on accepted advisories: [docs/security/dependency-audit.md](docs/security/dependency-audit.md); endpoint review: [docs/security/endpoint-review.md](docs/security/endpoint-review.md).
+- **Observability:** JSON logs with request IDs and redaction, `/api/v1/health`, `/api/v1/health/ready`, Prometheus `/api/v1/metrics` (`METRICS_TOKEN`).
+- **Load test:** `infra/load/k6-core-reads.js` with data from `apps/api/scripts/seed-load-test.ts` — results in [docs/ops/load-test.md](docs/ops/load-test.md).
+- **Scripts:** `infra/scripts/restore-drill.sh`, `verify-ledger.sql`, `smoke.sh`, `deploy.sh` (placeholder until a target exists).
+- **Runbooks:** [deployment](docs/runbooks/deployment.md), [migrations](docs/runbooks/migrations.md), [backup & restore](docs/runbooks/backup-restore.md), [incident response](docs/runbooks/incident-response.md), [secret rotation](docs/runbooks/secret-rotation.md). MVP sign-off: [docs/mvp-acceptance.md](docs/mvp-acceptance.md).
+
 ## Database
 
 PostgreSQL via Prisma 7. Financial invariants are enforced **in the database as well as in services**: balanced journals, immutable posted history and cross-user foreign keys. See [docs/architecture/erd.md](docs/architecture/erd.md) for the ERD and the full constraint catalogue. DB integration tests run against `takawise_test` (override with `TEST_DATABASE_URL`, whose name must end in `_test`).

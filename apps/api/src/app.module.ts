@@ -1,11 +1,13 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { EnvelopeInterceptor } from './common/envelope/envelope.interceptor';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { buildLoggerParams } from './common/logging/logger.config';
+import { MetricsModule } from './common/metrics/metrics.module';
+import { rateLimitModule } from './common/throttling/rate-limit.module';
 import { AppConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env';
 import { DatabaseModule } from './database/database.module';
@@ -29,12 +31,8 @@ export class AppModule {
       imports: [
         AppConfigModule.forRoot(config),
         LoggerModule.forRoot(buildLoggerParams(config)),
-        // In-memory counters: correct for a single API instance. Move to Redis
-        // storage before running more than one instance (Phase 7).
-        ThrottlerModule.forRoot({
-          throttlers: [{ name: 'default', ttl: 60_000, limit: 120 }],
-          skipIf: () => !config.THROTTLE_ENABLED,
-        }),
+        rateLimitModule(config),
+        MetricsModule,
         DatabaseModule,
         AuditModule,
         EmailModule,

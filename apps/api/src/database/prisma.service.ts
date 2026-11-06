@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { APP_CONFIG } from '../config/config.module';
 import type { AppConfig } from '../config/env';
@@ -10,7 +10,7 @@ import { PrismaClient } from '../generated/prisma/client';
  * Prisma entities must never be returned to clients; map to contract DTOs.
  */
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleDestroy {
+export class PrismaService extends PrismaClient implements OnApplicationShutdown {
   constructor(@Inject(APP_CONFIG) config: AppConfig) {
     super({
       adapter: new PrismaPg({
@@ -20,7 +20,11 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
     });
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /**
+   * Disconnect in the LAST shutdown phase, so in-flight work that is stopped in
+   * onModuleDestroy (background jobs, HTTP draining) can still use the database.
+   */
+  async onApplicationShutdown(): Promise<void> {
     await this.$disconnect();
   }
 

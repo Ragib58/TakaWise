@@ -124,7 +124,8 @@ export class TransfersService {
           }
         : {}),
     };
-    const [total, rows] = await this.prisma.$transaction([
+    // Separate, parallel reads: no transaction holding a pooled connection.
+    const [total, rows] = await Promise.all([
       this.prisma.transfer.count({ where }),
       this.prisma.transfer.findMany({
         where,

@@ -140,7 +140,8 @@ export class TransactionsService {
         : {}),
       ...(query.q ? { description: { contains: query.q, mode: 'insensitive' } } : {}),
     };
-    const [total, rows] = await this.prisma.$transaction([
+    // Separate, parallel reads: no transaction holding a pooled connection.
+    const [total, rows] = await Promise.all([
       this.prisma.transaction.count({ where }),
       this.prisma.transaction.findMany({
         where,

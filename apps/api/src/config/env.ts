@@ -73,6 +73,13 @@ export const envSchema = z
     // ── Auth (Phase 3, ADR-011) ──
     /** HS256 signing key for access tokens. */
     JWT_ACCESS_SECRET: secretSchema,
+    /**
+     * Previous signing key, accepted for VERIFICATION only during a rotation
+     * window (≥ access-token TTL). See docs/runbooks/secret-rotation.md.
+     */
+    JWT_ACCESS_SECRET_PREVIOUS: secretSchema.optional(),
+    /** Bearer token for GET /metrics. Unset → metrics disabled in production. */
+    METRICS_TOKEN: secretSchema.optional(),
     /** HMAC key for OTP codes and IP pseudonymisation (never the same as the JWT key). */
     AUTH_HMAC_SECRET: secretSchema,
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
