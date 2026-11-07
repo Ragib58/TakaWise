@@ -103,6 +103,48 @@ export const envSchema = z
       .regex(/^smtps?:\/\/.+/, 'must be an smtp:// or smtps:// URL')
       .optional(),
     EMAIL_FROM: z.string().min(3).default('TakaWise <no-reply@takawise.local>'),
+
+    // ── Opt-in AI and OCR (Phase 9, ADR-024) ──
+    /** Master switch. Off by default; nothing is ever sent to a provider while false. */
+    AI_ENABLED: booleanFlag,
+    /** `fake` is a deterministic offline provider for development and tests only. */
+    AI_PROVIDER: z.enum(['none', 'anthropic', 'fake']).default('none'),
+    /** Secret API key for the provider (blueprint §12). Never exposed to the browser. */
+    AI_PROVIDER_API_KEY: z.string().min(20).optional(),
+    AI_MODEL: z
+      .string()
+      .regex(/^[a-z0-9.-]{3,64}$/)
+      .default('claude-opus-5-5'),
+    /** Comma-separated feature flags; anything not listed is off. */
+    AI_FEATURES: z
+      .string()
+      .default('MONTHLY_SUMMARY,UNUSUAL_SPENDING,SAVINGS_SUGGESTIONS,TRANSACTION_DRAFT,RECEIPT_OCR')
+      .transform((raw) =>
+        raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      )
+      .pipe(
+        z.array(
+          z.enum([
+            'MONTHLY_SUMMARY',
+            'UNUSUAL_SPENDING',
+            'SAVINGS_SUGGESTIONS',
+            'TRANSACTION_DRAFT',
+            'RECEIPT_OCR',
+          ]),
+        ),
+      ),
+    /** Provider calls per user per rolling 24 h (cached insights do not count). */
+    AI_USER_DAILY_REQUESTS: z.coerce.number().int().min(1).max(1000).default(30),
+    /** Input + output tokens per user per calendar month (UTC). */
+    AI_USER_MONTHLY_TOKENS: z.coerce.number().int().min(1000).default(300_000),
+    /** Cost circuit breaker across all users per UTC day. */
+    AI_GLOBAL_DAILY_TOKENS: z.coerce.number().int().min(1000).default(5_000_000),
+    AI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(300_000).default(60_000),
+    /** Receipt upload limit; the provider accepts images up to 5 MB. */
+    OCR_MAX_BYTES: z.coerce.number().int().min(100_000).max(5_000_000).default(4_000_000),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production') {
@@ -138,6 +180,27 @@ export const envSchema = z
         code: 'custom',
         path: ['AUTH_HMAC_SECRET'],
         message: 'must differ from JWT_ACCESS_SECRET',
+      });
+    }
+    if (env.AI_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AI_PROVIDER'],
+        message: 'the fake AI provider is not allowed in production',
+      });
+    }
+    if (env.AI_PROVIDER === 'anthropic' && !env.AI_PROVIDER_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AI_PROVIDER_API_KEY'],
+        message: 'required when AI_PROVIDER=anthropic',
+      });
+    }
+    if (env.AI_ENABLED && env.AI_PROVIDER === 'none') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AI_PROVIDER'],
+        message: 'choose a provider when AI_ENABLED=true',
       });
     }
     if (env.DEV_LOG_OTP && env.NODE_ENV !== 'development') {

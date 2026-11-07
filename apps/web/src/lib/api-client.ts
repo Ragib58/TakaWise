@@ -44,7 +44,9 @@ export async function apiRequest<T>(
   const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
   const finalHeaders = new Headers(headers);
   finalHeaders.set('Accept', 'application/json');
-  if (body !== undefined) finalHeaders.set('Content-Type', 'application/json');
+  // Multipart uploads: the browser sets Content-Type with the boundary itself.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) finalHeaders.set('Content-Type', 'application/json');
 
   let response: Response;
   try {
@@ -52,7 +54,7 @@ export async function apiRequest<T>(
       credentials: 'include',
       ...init,
       headers: finalHeaders,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server. Check your connection.');

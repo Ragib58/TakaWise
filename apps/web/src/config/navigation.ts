@@ -9,6 +9,7 @@ import {
   PiggyBank,
   Scale,
   Settings,
+  Sparkles,
   Target,
   TrendingUp,
   Wallet,
@@ -35,6 +36,7 @@ export const APP_NAV: NavItem[] = [
   { href: '/app/investments', labelKey: 'nav.investments', icon: TrendingUp },
   { href: '/app/loans', labelKey: 'nav.loans', icon: HandCoins },
   { href: '/app/net-worth', labelKey: 'nav.netWorth', icon: Scale },
+  { href: '/app/assistant', labelKey: 'nav.assistant', icon: Sparkles },
   { href: '/app/reminders', labelKey: 'nav.reminders', icon: Bell },
   { href: '/app/notifications', labelKey: 'nav.notifications', icon: Inbox },
   {

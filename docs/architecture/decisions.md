@@ -154,6 +154,7 @@ erDiagram
 | 021 | Release hardening & operations (rate limits, metrics, redaction, images, CI/CD)        | Accepted |
 | 022 | Investments and loans are ledger accounts with detail records                          | Accepted |
 | 023 | Valuations and net worth: labelled user values, computed on read, no double counting   | Accepted |
+| 024 | Opt-in AI and OCR: backend facts, fact-reference prose, consent, no auto-save          | Accepted |
 
 ---
 
@@ -385,3 +386,49 @@ Posted journals and lines are immutable: application code never updates or delet
 - The UI always shows a "your figures, not advice" disclaimer.
 
 **Consequences:** The service layer cannot stop a user from entering a flat that they also track as an account. The UI copy warns against it, and items have no money-movement endpoints that could overlap the ledger. Verified prices need a future ADR, a connector and a migration that drops the CHECK.
+
+## ADR-024 — Opt-in AI and OCR (Phase 9, 2026-11-07)
+
+**Context:** The blueprint adds AI behind feature flags and explicit consent. The backend must compute the numbers and the model may only explain them. Data must be minimised and redacted, structured responses validated, and every answer must show its period, data scope, limitations and a not-advice disclaimer. Features: monthly summary, unusual-spending explanation, saving/budget suggestions, a natural-language transaction draft, and receipt OCR. Drafts need user confirmation. The work also needs a provider adapter, rate and cost limits, prompt-injection defences, and opt-out and delete controls.
+
+**Decision:**
+
+- **Off by default, twice gated.**
+  - The operator switch is `AI_ENABLED`, with `AI_PROVIDER` set to `anthropic` or `fake`. Per-feature flags are in `AI_FEATURES`.
+  - Each user grants consent per scope (`INSIGHTS`, `TRANSACTION_DRAFT`, `RECEIPT_OCR`) against a versioned notice (`AI_POLICY_VERSION`). Bumping the version invalidates older consents.
+  - Withdrawing consent works even while AI is off.
+- **Numbers never come from the model.**
+  - Domain fact builders (`domain/ai/facts.ts`) compute each insight's facts from posted transactions, budgets and goals for one month and one currency. Unusual spending is detected deterministically (≥ 1.5× the earlier-month average and ≥ 5 % of the month's spending, or a new category ≥ 10 %).
+  - The model writes prose that refers to facts as `{{fact_id}}` and is forbidden from writing any digit. `domain/ai/narrative.ts` rejects unknown ids, digits in either script, links, markup and instruction-like text. The client formats the values in the user's locale.
+  - If there is nothing to explain (`NO_DATA`, `NOTHING_UNUSUAL`), the provider is not called.
+- **Minimisation.**
+  - Insights send aggregates only: no ids, descriptions, account names or numbers. The user can withhold category names, budgets and goals; withheld names become aliases.
+  - Drafts send the user's sentence after identifier redaction (e-mail, links, digit runs of 10 or more) plus short aliases (`A1`, `C3`) for their own accounts and categories. Aliases are mapped back only to the caller's ids.
+  - Receipt images are sniffed by magic bytes (JPEG, PNG or WebP) and capped by `OCR_MAX_BYTES`. They are held in memory for the call and never stored.
+  - The database stores consents, a usage row per call (feature, status, tokens and duration, never content) and the last validated insight per month, currency and locale, keyed by a hash of the facts so that repeat views cost nothing.
+- **Provider adapter.**
+  - `AiProvider` has `generate(request with Zod schema)` as its contract.
+  - `AnthropicProvider` uses the official SDK. It calls `beta.messages.parse` with structured outputs, `effort` set low or medium, server-side refusal fallback, one retry, a timeout, and no tools, so the model can only return data. Refusals, truncation and schema mismatches are mapped to typed errors.
+  - `FakeProvider` is deterministic and offline. It is used for development, CI and E2E, and is rejected in production.
+  - The default model is `claude-opus-5-5` (`AI_MODEL`).
+- **Limits.**
+  - Per user: calls in the last 24 h (`AI_USER_DAILY_REQUESTS`) and tokens per UTC month (`AI_USER_MONTHLY_TOKENS`). Both return 429 `AI_LIMIT_REACHED`.
+  - A global daily token circuit breaker returns 503 `AI_UNAVAILABLE`.
+  - Each AI route also has a throttle of 10 requests per minute.
+- **Prompt injection.**
+  - User text, category names and receipt text are wrapped in `<untrusted_input>` blocks that cannot be closed from inside. The system prompt treats them as data.
+  - The output is schema-constrained and then re-validated. Free-text fields are cleaned, redacted and blanked if they look like instructions, and the user sees a `SUSPICIOUS_CONTENT` warning.
+  - Nothing the model returns can act. Drafts are only pre-filled into the normal transaction form (`requiresReview: true`) and are posted only by the user's own Save, which uses the ordinary idempotent endpoint.
+- **Controls.**
+  - `/app/assistant` shows what each scope shares, per-insight data-scope checkboxes, period, data scope, limitations and a disclaimer on every answer, and usage.
+  - "Delete my AI data" revokes all consents and deletes stored insights. Revoking `INSIGHTS` deletes its insights. Consent changes are audited without content.
+
+**Consequences:**
+
+- AI cannot corrupt the ledger or invent figures.
+- Prose quality depends on the model's ability to follow the placeholder rule. Invalid answers become `AI_OUTPUT_INVALID` (502), are recorded as `REJECTED`, and are never shown.
+- Account and category names do leave the system for drafts and OCR. This is documented in the consent text.
+- Usage rows survive "delete my AI data" so that limits cannot be reset; they hold no content.
+- Before launch:
+  - The provider's data-processing terms and retention (a zero-retention agreement if available) and the AI notice need legal review (launch blocker L1).
+  - A real-provider smoke test with a production key must run in staging.

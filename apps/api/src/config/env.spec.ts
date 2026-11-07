@@ -123,4 +123,42 @@ describe('loadConfig', () => {
   it('returns a frozen object', () => {
     expect(Object.isFrozen(load())).toBe(true);
   });
+
+  describe('AI (Phase 9)', () => {
+    it('is off by default with every feature flag listed', () => {
+      const config = load();
+      expect(config.AI_ENABLED).toBe(false);
+      expect(config.AI_PROVIDER).toBe('none');
+      expect(config.AI_MODEL).toBe('claude-opus-5-5');
+      expect(config.AI_FEATURES).toHaveLength(5);
+    });
+
+    it('needs a provider when enabled and a key for anthropic', () => {
+      expect(() => load({ AI_ENABLED: 'true' })).toThrow(/AI_PROVIDER/);
+      expect(() => load({ AI_ENABLED: 'true', AI_PROVIDER: 'anthropic' })).toThrow(
+        /AI_PROVIDER_API_KEY/,
+      );
+      expect(
+        load({ AI_ENABLED: 'true', AI_PROVIDER: 'anthropic', AI_PROVIDER_API_KEY: 'k'.repeat(30) })
+          .AI_ENABLED,
+      ).toBe(true);
+    });
+
+    it('never allows the fake provider in production', () => {
+      expect(() => load({ ...prodBase, AI_PROVIDER: 'fake' })).toThrow(/fake AI provider/);
+    });
+
+    it('parses and validates feature flags', () => {
+      expect(load({ AI_FEATURES: 'MONTHLY_SUMMARY, RECEIPT_OCR' }).AI_FEATURES).toEqual([
+        'MONTHLY_SUMMARY',
+        'RECEIPT_OCR',
+      ]);
+      expect(load({ AI_FEATURES: '' }).AI_FEATURES).toEqual([]);
+      expect(() => load({ AI_FEATURES: 'TRADING_BOT' })).toThrow(/AI_FEATURES/);
+    });
+
+    it('caps the receipt size at the provider limit', () => {
+      expect(() => load({ OCR_MAX_BYTES: '6000000' })).toThrow(/OCR_MAX_BYTES/);
+    });
+  });
 });

@@ -27,6 +27,13 @@ export const API_ERROR_CODES = [
   'INVALID_OR_EXPIRED_CODE',
   'WEAK_PASSWORD',
   'CSRF_FAILED',
+  // Opt-in AI and OCR (Phase 9)
+  'FEATURE_DISABLED',
+  'AI_CONSENT_REQUIRED',
+  'AI_LIMIT_REACHED',
+  'AI_UNAVAILABLE',
+  'AI_OUTPUT_INVALID',
+  'UNSUPPORTED_MEDIA_TYPE',
 ] as const;
 
 export const apiErrorCodeSchema = z.enum(API_ERROR_CODES);

@@ -173,6 +173,9 @@ jobs:
       APP_BASE_URL: http://localhost:3100
       LOG_LEVEL: warn
       PRISMA_HIDE_UPDATE_MESSAGE: '1'
+      # Phase 9: the deterministic offline AI provider (never a real key in CI).
+      AI_ENABLED: 'true'
+      AI_PROVIDER: fake
 
     steps:
       - uses: actions/checkout@v4

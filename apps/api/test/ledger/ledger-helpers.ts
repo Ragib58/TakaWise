@@ -13,6 +13,8 @@ export function client(app: TestApp, session: Session) {
       request(server(app)).patch(`/api/v1${path}`).set('Authorization', auth).send(body),
     delete: (path: string) =>
       request(server(app)).delete(`/api/v1${path}`).set('Authorization', auth),
+    put: (path: string, body: object = {}) =>
+      request(server(app)).put(`/api/v1${path}`).set('Authorization', auth).send(body),
     /** POST with a fresh Idempotency-Key unless one is given (null = omit the header). */
     post: (path: string, body: object = {}, key: string | null = randomUUID()) => {
       const req = request(server(app)).post(`/api/v1${path}`).set('Authorization', auth);

@@ -17,6 +17,17 @@ export function formatMoney(amount: string, currency: string, locale: UiLocale =
   }).format(amount as Intl.StringNumericLiteral);
 }
 
+/** Display-only formatting of a decimal STRING (counts, percentages); locale digits. */
+export function formatNumber(
+  value: string,
+  locale: UiLocale = 'en',
+  maxFractionDigits = 2,
+): string {
+  return new Intl.NumberFormat(intlLocale(locale), {
+    maximumFractionDigits: maxFractionDigits,
+  }).format(value as Intl.StringNumericLiteral);
+}
+
 /** "2026-11" → "November 2026" (or Bangla). */
 export function formatMonth(month: string, locale: UiLocale = 'en'): string {
   return new Intl.DateTimeFormat(intlLocale(locale), {

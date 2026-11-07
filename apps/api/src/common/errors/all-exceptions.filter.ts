@@ -31,6 +31,12 @@ const DEFAULT_MESSAGES: Record<ApiErrorCode, string> = {
   INVALID_OR_EXPIRED_CODE: 'The code is invalid or has expired. Request a new one.',
   WEAK_PASSWORD: 'Choose a stronger password.',
   CSRF_FAILED: 'The request could not be verified. Please refresh and try again.',
+  FEATURE_DISABLED: 'This feature is not available.',
+  AI_CONSENT_REQUIRED: 'Please review and accept the AI data notice first.',
+  AI_LIMIT_REACHED: 'You have reached your AI usage limit. Please try again later.',
+  AI_UNAVAILABLE: 'The AI assistant is temporarily unavailable. Nothing was saved.',
+  AI_OUTPUT_INVALID: 'The AI assistant could not produce a reliable answer. Nothing was saved.',
+  UNSUPPORTED_MEDIA_TYPE: 'This file type is not supported.',
 };
 
 export function codeForStatus(status: number): ApiErrorCode {

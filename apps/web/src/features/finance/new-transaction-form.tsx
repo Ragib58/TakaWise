@@ -39,7 +39,27 @@ const nowLocal = () => {
   return d.toISOString().slice(0, 16);
 };
 
-export function NewTransactionForm() {
+/** Values a reviewed AI draft (Phase 9) pre-fills; the user still confirms every field. */
+export type TransactionPrefill = {
+  type?: 'INCOME' | 'EXPENSE' | null;
+  amount?: string | null;
+  accountId?: string | null;
+  categoryId?: string | null;
+  /** YYYY-MM-DD; noon local time is used. */
+  occurredOn?: string | null;
+  description?: string | null;
+};
+
+export function NewTransactionForm({
+  initial,
+  embedded = false,
+  onSaved,
+}: {
+  initial?: TransactionPrefill;
+  /** Inside another page: no page header or navigation buttons. */
+  embedded?: boolean;
+  onSaved?: () => void;
+} = {}) {
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
@@ -53,12 +73,12 @@ export function NewTransactionForm() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      type: 'EXPENSE',
-      accountId: '',
-      categoryId: '',
-      amount: '',
-      occurredAt: nowLocal(),
-      description: '',
+      type: initial?.type ?? 'EXPENSE',
+      accountId: initial?.accountId ?? '',
+      categoryId: initial?.categoryId ?? '',
+      amount: initial?.amount ?? '',
+      occurredAt: initial?.occurredOn ? `${initial.occurredOn}T12:00` : nowLocal(),
+      description: initial?.description ?? '',
     },
   });
   const { formError, handle } = useApiFormError(form.setError);
@@ -90,6 +110,7 @@ export function NewTransactionForm() {
       );
       form.reset({ ...values, amount: '', description: '' });
       setKey(crypto.randomUUID());
+      onSaved?.();
     } catch (error) {
       handle(error);
       // A rejected request stored nothing; a new attempt gets a new key.
@@ -111,7 +132,7 @@ export function NewTransactionForm() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title={t('transactions.new')} />
+      {embedded ? null : <PageHeader title={t('transactions.new')} />}
       <Card className="max-w-xl">
         <form onSubmit={(e) => void onSubmit(e)} noValidate className="flex flex-col gap-4">
           {formError ? <Alert>{formError}</Alert> : null}
@@ -203,9 +224,15 @@ export function NewTransactionForm() {
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? t('common.saving') : t('common.save')}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => router.push('/app/transactions')}>
-              {t('nav.transactions')}
-            </Button>
+            {embedded ? null : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push('/app/transactions')}
+              >
+                {t('nav.transactions')}
+              </Button>
+            )}
           </div>
         </form>
       </Card>

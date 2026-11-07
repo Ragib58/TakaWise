@@ -1,3 +1,4 @@
+export * from './ai';
 export * from './api/envelope';
 export * from './api/health';
 export * from './auth';

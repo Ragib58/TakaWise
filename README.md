@@ -106,6 +106,7 @@ Then open http://localhost:3100, http://localhost:4000/api/v1/health and http://
 - Budgets, savings goals (earmark model), reminders, notifications and background jobs: [docs/api/planning.md](docs/api/planning.md).
 - Dashboard, reports and CSV export: [docs/api/reports.md](docs/api/reports.md).
 - Investments, loans, net-worth items and net worth (Phase 8): [docs/api/wealth.md](docs/api/wealth.md). Rates, valuations and schedules are the user's own figures; nothing is fetched or invented.
+- Opt-in AI insights, transaction drafts and receipt OCR (Phase 9): [docs/api/ai.md](docs/api/ai.md). Off by default (`AI_ENABLED=false`). The backend computes every number, nothing is saved without the user confirming it, and `AI_PROVIDER=fake` runs everything offline for development.
 
 ## End-to-end tests
 

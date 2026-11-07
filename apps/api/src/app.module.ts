@@ -12,6 +12,7 @@ import { AppConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { PlanningModule } from './modules/planning.module';
@@ -44,6 +45,7 @@ export class AppModule {
         PlanningModule,
         ReportsModule,
         WealthModule,
+        AiModule,
         HealthModule,
       ],
       providers: [

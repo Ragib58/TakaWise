@@ -35,7 +35,10 @@ export type TestApp = NestExpressApplication & { email: InMemoryEmailSender };
 
 export async function createTestApp(
   env: Record<string, string> = {},
-  extra: Pick<ModuleMetadata, 'controllers' | 'providers'> = {},
+  extra: Pick<ModuleMetadata, 'controllers' | 'providers'> & {
+    /** Replace providers by token, e.g. a scripted AI provider. */
+    overrides?: ReadonlyArray<{ token: unknown; value: unknown }>;
+  } = {},
 ): Promise<TestApp> {
   const config = loadConfig({
     NODE_ENV: 'test',
@@ -53,14 +56,17 @@ export async function createTestApp(
   });
 
   const email = new InMemoryEmailSender();
-  const moduleRef = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     imports: [AppModule.register(config)],
     controllers: extra.controllers ?? [],
     providers: extra.providers ?? [],
   })
     .overrideProvider(EMAIL_SENDER)
-    .useValue(email)
-    .compile();
+    .useValue(email);
+  for (const o of extra.overrides ?? []) {
+    builder = builder.overrideProvider(o.token as never).useValue(o.value);
+  }
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
   configureApp(app, config);

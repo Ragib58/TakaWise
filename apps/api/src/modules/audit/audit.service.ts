@@ -60,7 +60,11 @@ export type AuditAction =
   | 'net_worth_item.archived'
   | 'net_worth_item.restored'
   | 'valuation.created'
-  | 'valuation.deleted';
+  | 'valuation.deleted'
+  // Phase 9: opt-in AI and OCR (never the content sent or received)
+  | 'ai.consent.granted'
+  | 'ai.consent.revoked'
+  | 'ai.data.deleted';
 
 export type AuditEvent = {
   action: AuditAction;

@@ -31,6 +31,8 @@ export default defineConfig({
     {
       command: 'pnpm --filter @takawise/api start',
       url: `${API_URL}/api/v1/health/ready`,
+      // Phase 9: AI through the deterministic offline provider (no key, nothing leaves the machine).
+      env: { ...process.env, AI_ENABLED: 'true', AI_PROVIDER: 'fake' },
       reuseExistingServer: true,
       timeout: 120_000,
       cwd: '../..',

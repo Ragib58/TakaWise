@@ -56,40 +56,46 @@ erDiagram
     INVESTMENTS ||--o{ VALUATIONS : "valued"
     USERS ||--o{ NET_WORTH_ITEMS : owns
     NET_WORTH_ITEMS ||--o{ VALUATIONS : "valued"
+    USERS ||--o{ AI_CONSENTS : grants
+    USERS ||--o{ AI_REQUESTS : "uses (metadata only)"
+    USERS ||--o{ AI_INSIGHTS : "cached answers"
 ```
 
 `audit_logs` and `outbox_events` deliberately have **no foreign keys**: the audit trail must survive account deletion or anonymisation, and outbox rows may outlive their subject.
 
 ## Tables
 
-| Table                      | Purpose                                                                           | Notable constraints                                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `users`                    | Login identity                                                                    | email unique **and** lower-cased (`users_email_normalized`)                                                     |
-| `user_profiles`            | Name, locale (EN/BN), timezone (default `Asia/Dhaka`), default currency (`BDT`)   | ISO currency                                                                                                    |
-| `sessions`                 | Refresh-token sessions (hash only), `family_id` for reuse detection               | token hash unique                                                                                               |
-| `verification_tokens`      | Email-verify / reset codes (HMAC only), attempts, expiry                          | attempts ≥ 0                                                                                                    |
-| `financial_accounts`       | User-facing accounts. No balance column (ADR-004)                                 | opening balance ≥ 0. Credit limit only on cards. Active names unique per user, case-insensitive                 |
-| `ledger_account_templates` | Seeded system codes: `EQUITY_OPENING_BALANCE`, `INCOME`, `EXPENSE`                | class ↔ normal balance                                                                                          |
-| `ledger_accounts`          | Chart of accounts: one per financial account plus three per-user system accounts  | exactly one of `financial_account_id` / `system_code`. Class ↔ normal balance. Card → LIABILITY, others → ASSET |
-| `journal_entries`          | Posted journals (immutable)                                                       | REVERSAL ⇔ `reverses_id`. One reversal per entry. No reversal of a reversal                                     |
-| `journal_lines`            | Debit/credit lines (immutable)                                                    | exactly one side > 0. **Deferred balance trigger**                                                              |
-| `transactions`             | Income/expense command record ↔ its journal                                       | amount > 0. Category usable and type-matched. Journal kind and currency match. Financial fields frozen          |
-| `transfers`                | Same-currency transfer ↔ its journal                                              | distinct accounts. Same currency everywhere. Financial fields frozen                                            |
-| `idempotency_keys`         | Replay protection (ADR-006)                                                       | PK `(user_id, key)`                                                                                             |
-| `categories`               | System (`user_id` null, stable `system_key`) and custom categories, EN + BN names | parent same type and owner. Active custom names unique per user and type                                        |
-| `budgets`, `budget_items`  | Period budgets with optional overall limit plus per-category limits               | end ≥ start. Amounts > 0. Items use expense categories only                                                     |
-| `savings_goals`            | Earmark goals linked to one asset account (ADR-009)                               | not a card account. Currency matches the account                                                                |
-| `goal_contributions`       | Append-only `CONTRIBUTION` / `WITHDRAWAL` / `REVERSAL` rows                       | reversal: same goal, same amount, only once. Rows are never edited                                              |
-| `reminders`                | One-time reminders (`due_at` UTC + entry timezone)                                | title not blank                                                                                                 |
-| `notifications`            | In-app notifications                                                              | —                                                                                                               |
-| `outbox_events`            | Transactional outbox (ADR-014)                                                    | attempts ≥ 0                                                                                                    |
-| `files`                    | Object-storage metadata                                                           | size > 0                                                                                                        |
-| `audit_logs`               | Append-only audit trail                                                           | UPDATE/DELETE blocked                                                                                           |
-| `investments` (P8)         | Details of an `INVESTMENT` account (kind, maturity, user-entered rate/estimate)   | PK = account id. Account must be `INVESTMENT`. Rate 0–100. Quantity > 0                                         |
-| `loans` (P8)               | Details of a `LOAN` (borrowed) or `LOAN_RECEIVABLE` (lent) account                | PK = account id. Direction ↔ account type. Principal > 0. Term 1–600 and first payment date: both or neither    |
-| `loan_payments` (P8)       | Principal transfer + interest transaction of one repayment                        | amounts ≥ 0, sum > 0. Linked postings match the amounts. Append-only (only `POSTED → REVERSED`)                 |
-| `net_worth_items` (P8)     | Assets/liabilities that are not accounts (flat, car, informal debt)               | kind ↔ side. Active names unique per user. Archive consistent                                                   |
-| `valuations` (P8)          | Dated value of an investment or a net-worth item                                  | exactly one target. Value ≥ 0. One per target per date. Currency matches. `VERIFIED` rejected. Never updated    |
+| Table                      | Purpose                                                                               | Notable constraints                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `users`                    | Login identity                                                                        | email unique **and** lower-cased (`users_email_normalized`)                                                     |
+| `user_profiles`            | Name, locale (EN/BN), timezone (default `Asia/Dhaka`), default currency (`BDT`)       | ISO currency                                                                                                    |
+| `sessions`                 | Refresh-token sessions (hash only), `family_id` for reuse detection                   | token hash unique                                                                                               |
+| `verification_tokens`      | Email-verify / reset codes (HMAC only), attempts, expiry                              | attempts ≥ 0                                                                                                    |
+| `financial_accounts`       | User-facing accounts. No balance column (ADR-004)                                     | opening balance ≥ 0. Credit limit only on cards. Active names unique per user, case-insensitive                 |
+| `ledger_account_templates` | Seeded system codes: `EQUITY_OPENING_BALANCE`, `INCOME`, `EXPENSE`                    | class ↔ normal balance                                                                                          |
+| `ledger_accounts`          | Chart of accounts: one per financial account plus three per-user system accounts      | exactly one of `financial_account_id` / `system_code`. Class ↔ normal balance. Card → LIABILITY, others → ASSET |
+| `journal_entries`          | Posted journals (immutable)                                                           | REVERSAL ⇔ `reverses_id`. One reversal per entry. No reversal of a reversal                                     |
+| `journal_lines`            | Debit/credit lines (immutable)                                                        | exactly one side > 0. **Deferred balance trigger**                                                              |
+| `transactions`             | Income/expense command record ↔ its journal                                           | amount > 0. Category usable and type-matched. Journal kind and currency match. Financial fields frozen          |
+| `transfers`                | Same-currency transfer ↔ its journal                                                  | distinct accounts. Same currency everywhere. Financial fields frozen                                            |
+| `idempotency_keys`         | Replay protection (ADR-006)                                                           | PK `(user_id, key)`                                                                                             |
+| `categories`               | System (`user_id` null, stable `system_key`) and custom categories, EN + BN names     | parent same type and owner. Active custom names unique per user and type                                        |
+| `budgets`, `budget_items`  | Period budgets with optional overall limit plus per-category limits                   | end ≥ start. Amounts > 0. Items use expense categories only                                                     |
+| `savings_goals`            | Earmark goals linked to one asset account (ADR-009)                                   | not a card account. Currency matches the account                                                                |
+| `goal_contributions`       | Append-only `CONTRIBUTION` / `WITHDRAWAL` / `REVERSAL` rows                           | reversal: same goal, same amount, only once. Rows are never edited                                              |
+| `reminders`                | One-time reminders (`due_at` UTC + entry timezone)                                    | title not blank                                                                                                 |
+| `notifications`            | In-app notifications                                                                  | —                                                                                                               |
+| `outbox_events`            | Transactional outbox (ADR-014)                                                        | attempts ≥ 0                                                                                                    |
+| `files`                    | Object-storage metadata                                                               | size > 0                                                                                                        |
+| `audit_logs`               | Append-only audit trail                                                               | UPDATE/DELETE blocked                                                                                           |
+| `investments` (P8)         | Details of an `INVESTMENT` account (kind, maturity, user-entered rate/estimate)       | PK = account id. Account must be `INVESTMENT`. Rate 0–100. Quantity > 0                                         |
+| `loans` (P8)               | Details of a `LOAN` (borrowed) or `LOAN_RECEIVABLE` (lent) account                    | PK = account id. Direction ↔ account type. Principal > 0. Term 1–600 and first payment date: both or neither    |
+| `loan_payments` (P8)       | Principal transfer + interest transaction of one repayment                            | amounts ≥ 0, sum > 0. Linked postings match the amounts. Append-only (only `POSTED → REVERSED`)                 |
+| `net_worth_items` (P8)     | Assets/liabilities that are not accounts (flat, car, informal debt)                   | kind ↔ side. Active names unique per user. Archive consistent                                                   |
+| `valuations` (P8)          | Dated value of an investment or a net-worth item                                      | exactly one target. Value ≥ 0. One per target per date. Currency matches. `VERIFIED` rejected. Never updated    |
+| `ai_consents` (P9)         | Per-scope AI consent (`INSIGHTS`, `TRANSACTION_DRAFT`, `RECEIPT_OCR`), notice version | PK `(user_id, scope)`. `revoked_at` ≥ `granted_at`. Cascade on user delete                                      |
+| `ai_requests` (P9)         | One row per provider call: feature, status, tokens, duration. **No content**          | tokens and duration ≥ 0. Indexed by user/time and time (limits)                                                 |
+| `ai_insights` (P9)         | Last validated insight per user, kind, month, currency and locale + facts hash        | kind is an insight kind. Month `YYYY-MM`. Unique per key. Deleted on revoke / delete-my-AI-data                 |
 
 ## Invariants enforced by the database
 
@@ -131,12 +137,23 @@ All of these live in `20261105152200_ledger_constraints/migration.sql`. The appl
 
 Enum values are added in their own migration because PostgreSQL cannot use a new enum value in the transaction that added it.
 
+### Added in Phase 9 (`20261107160000_ai_opt_in`)
+
+| Invariant                                         | Mechanism                                 |
+| ------------------------------------------------- | ----------------------------------------- |
+| Consent withdrawal never predates the grant       | CHECK `ai_consents_revoked_after_granted` |
+| Usage counters are non-negative                   | CHECK `ai_requests_tokens_non_negative`   |
+| Only insight kinds are cached, with a valid month | CHECKs on `ai_insights`                   |
+
+Prompts, model answers, typed text and receipt images are never stored (ADR-024).
+
 ### Application-only rules (not enforced in SQL)
 
 - Archived accounts and categories cannot receive **new** postings. History may still reference them.
 - An earmark cap: total goal contributions ≤ the linked account's ledger balance (ADR-009). This depends on live balances, so it is enforced in the service.
 - A transaction's amount equals its journal's amount. The posting service builds both from the same value.
 - Idempotency semantics (same hash → stored response; different hash → 422).
+- Phase 9: AI consent/flag checks, per-user and global usage limits, and the narrative/draft validators run in the service (ADR-024).
 - Phase 8: `INVESTMENT`/`LOAN`/`LOAN_RECEIVABLE` accounts are created only through `/investments` and `/loans`, so their detail row always exists (POST `/accounts` rejects these types). A loan payment's principal cannot exceed the outstanding balance. The two parts of a loan payment are reversed only together (the generic reverse endpoints refuse them).
 
 ## Migrations workflow
