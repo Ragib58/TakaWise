@@ -8,13 +8,15 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
-import { formatMoney, formatMonth } from '@/lib/format';
+import { formatDate, formatMoney, formatMonth } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/use-t';
 
 /** Recharts needs numbers; this is display-only and never feeds back into money maths. */
@@ -117,6 +119,106 @@ export function CashFlowChart({ months, currency }: { months: CashFlowPoint[]; c
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="sr-only">{tableView}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export type NetWorthPoint = { date: string; assets: string; liabilities: string; netWorth: string };
+
+/**
+ * Net worth at each month-end (Phase 8). Same accessibility contract as the
+ * cash-flow chart: decorative chart, real table always available.
+ */
+export function NetWorthChart({
+  points,
+  currency,
+  title,
+}: {
+  points: NetWorthPoint[];
+  currency: string;
+  title: string;
+}) {
+  const t = useT();
+  const { locale } = useLocale();
+  const [table, setTable] = useState(false);
+  const money = (v: string) => formatMoney(v, currency, locale);
+  const data = points.map((p) => ({
+    label: formatDate(p.date, locale),
+    netWorth: toChartNumber(p.netWorth),
+  }));
+
+  const tableView = (
+    <table className="w-full text-sm">
+      <caption className="sr-only">{title}</caption>
+      <thead>
+        <tr className="border-b text-left text-muted-foreground">
+          <th scope="col" className="py-2 font-medium">
+            {t('common.date')}
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            {t('netWorth.assets')}
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            {t('netWorth.liabilities')}
+          </th>
+          <th scope="col" className="py-2 text-right font-medium">
+            {t('netWorth.net')}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {points.map((p) => (
+          <tr key={p.date} className="border-b last:border-0">
+            <th scope="row" className="py-2 text-left font-normal">
+              {formatDate(p.date, locale)}
+            </th>
+            <td className="py-2 text-right tabular-nums">{money(p.assets)}</td>
+            <td className="py-2 text-right tabular-nums">{money(p.liabilities)}</td>
+            <td className="py-2 text-right tabular-nums">{money(p.netWorth)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-end">
+        <ViewToggle table={table} onToggle={() => setTable((v) => !v)} />
+      </div>
+      {table ? (
+        tableView
+      ) : (
+        <>
+          <div className="h-56 w-full" aria-hidden>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ left: 8, right: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis
+                  tick={{ fontSize: 12 }}
+                  width={70}
+                  tickFormatter={(v: number) =>
+                    new Intl.NumberFormat(locale === 'bn' ? 'bn-BD' : 'en-BD', {
+                      notation: 'compact',
+                    }).format(v)
+                  }
+                />
+                <Tooltip formatter={(value) => money(String(value))} />
+                <Line
+                  type="monotone"
+                  dataKey="netWorth"
+                  name={t('netWorth.net')}
+                  stroke="var(--color-brand-teal)"
+                  strokeWidth={2}
+                  dot
+                />
+              </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="sr-only">{tableView}</div>

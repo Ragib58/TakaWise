@@ -141,6 +141,14 @@ export const SYSTEM_CATEGORIES: readonly SystemCategorySeed[] = [
     nameBn: 'বীমা',
     icon: 'shield',
   },
+  {
+    // Phase 8: interest part of a loan repayment (the principal is a transfer).
+    key: 'expense.loan_interest',
+    type: 'EXPENSE',
+    nameEn: 'Loan Interest',
+    nameBn: 'ঋণের সুদ',
+    icon: 'percent',
+  },
   { key: 'expense.taxes', type: 'EXPENSE', nameEn: 'Taxes', nameBn: 'কর', icon: 'landmark' },
   {
     key: 'expense.other',

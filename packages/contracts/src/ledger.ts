@@ -15,7 +15,8 @@ import {
 
 export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
 
-export const ACCOUNT_TYPES = [
+/** Account types a user creates directly via POST /accounts. */
+export const EVERYDAY_ACCOUNT_TYPES = [
   'CASH',
   'BANK',
   'MOBILE_WALLET',
@@ -23,8 +24,12 @@ export const ACCOUNT_TYPES = [
   'CREDIT_CARD_TRACKING',
   'OTHER',
 ] as const;
+/** Phase 8: created only through /investments and /loans (ADR-022). */
+export const WEALTH_ACCOUNT_TYPES = ['INVESTMENT', 'LOAN', 'LOAN_RECEIVABLE'] as const;
+export const ACCOUNT_TYPES = [...EVERYDAY_ACCOUNT_TYPES, ...WEALTH_ACCOUNT_TYPES] as const;
 export const accountTypeSchema = z.enum(ACCOUNT_TYPES);
 export type AccountType = z.infer<typeof accountTypeSchema>;
+export const everydayAccountTypeSchema = z.enum(EVERYDAY_ACCOUNT_TYPES);
 
 const nameSchema = z.string().trim().min(1, 'Enter a name').max(100);
 const optionalText = (max: number) => z.string().trim().max(max).optional();
@@ -38,7 +43,7 @@ const instantSchema = z.iso.datetime({
 export const createAccountRequestSchema = z
   .strictObject({
     name: nameSchema,
-    type: accountTypeSchema,
+    type: everydayAccountTypeSchema,
     currency: currencyCodeSchema.default(DEFAULT_CURRENCY),
     openingDate: isoDateSchema,
     /** Asset accounts: money held. Credit cards: amount owed. Never negative. */
@@ -64,6 +69,8 @@ export type UpdateAccountRequest = z.input<typeof updateAccountRequestSchema>;
 
 export const listAccountsQuerySchema = z.strictObject({
   status: z.enum(['ACTIVE', 'ARCHIVED', 'ALL']).default('ACTIVE'),
+  /** EVERYDAY = cash/bank/wallet/savings/card/other; WEALTH = investments and loans. */
+  group: z.enum(['EVERYDAY', 'WEALTH', 'ALL']).default('ALL'),
 });
 
 export const accountResponseSchema = z.object({

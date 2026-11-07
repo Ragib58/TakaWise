@@ -151,6 +151,9 @@ erDiagram
 | 018 | Toolchain versions: NestJS 11, TypeScript 6, ESLint 9, SWC compilation                 | Accepted |
 | 019 | Prisma 7 with pg driver adapter; DB-level invariants and composite ownership FKs       | Accepted |
 | 020 | UI localisation (typed dictionary), money/date formatting, accessible charts           | Accepted |
+| 021 | Release hardening & operations (rate limits, metrics, redaction, images, CI/CD)        | Accepted |
+| 022 | Investments and loans are ledger accounts with detail records                          | Accepted |
+| 023 | Valuations and net worth: labelled user values, computed on read, no double counting   | Accepted |
 
 ---
 
@@ -348,3 +351,37 @@ Posted journals and lines are immutable: application code never updates or delet
 - **Delivery:** multi-stage, non-root Docker images (API, migrator, web standalone) with npm removed from runtime layers; CI adds `pnpm audit`, gitleaks and Trivy; `deploy.yml` (GHCR → staging + smoke → manual-approval production) is gated by `DEPLOY_ENABLED` until a target is provisioned (AWS per blueprint §12, [runbooks/deployment.md](../runbooks/deployment.md)).
 
 **Consequences:** The load test showed PostgreSQL CPU is the first bottleneck; the dashboard query consolidation and monthly projections are the next performance levers. Runbooks live in `docs/runbooks/`; the acceptance checklist is [mvp-acceptance.md](../mvp-acceptance.md).
+
+### ADR-022 — Investments and loans are ledger accounts (Phase 8, 2026-11-07)
+
+**Context:** Phase 8 adds DPS/FDR/savings certificates/bonds/stocks/funds/gold and loans. Money really moves between a user's bank and these things, so a separate "records only" model would force users to log an FDR purchase as spending or count the same money twice.
+**Decision:**
+
+- New account types: `INVESTMENT` (asset), `LOAN` (borrowed, **liability**) and `LOAN_RECEIVABLE` (lent, asset). Each has a 1:1 detail table (`investments`, `loans`) keyed by the account id. These types are created only through `/investments` and `/loans`; `POST /accounts` refuses them. The class mapping is defined once in `ledgerClassForAccountType` and mirrored by a DB trigger.
+- All money movement uses the existing, tested postings:
+  - Funding or withdrawing an investment, disbursing a loan, and paying principal are **transfers**, which are excluded from income and expense.
+  - Investment returns are **income** on the investment account.
+  - Loan interest is an **expense** (borrowed, category `expense.loan_interest`) or **income** (lent).
+- A loan payment is a `loan_payments` row linking its principal transfer and its interest transaction. All of them commit in one DB transaction. The two parts are reversed only together: the generic reverse endpoints refuse them, and a DB trigger checks the amounts.
+- The outstanding amount is **always the ledger balance** of the loan account. The amortization schedule (reducing-balance EMI, paisa rounding) is computed from the user's own terms and labelled an estimate. `suggestedPayment` is one month of interest on the actual outstanding amount.
+- `TransfersService` and `TransactionsService` expose `postInTx` and `reverseInTx`, so composite commands reuse one posting path.
+
+**Consequences:** The dashboard's ledger `netBalance` now includes loans and investments at their recorded value, which is correct as a ledger figure; the dashboard copy says "cards and loans". Payments made with a plain transfer to a loan account still reduce the outstanding amount but do not appear as `loan_payments`.
+
+### ADR-023 — Valuations and net worth (Phase 8, 2026-11-07)
+
+**Context:** The blueprint asks for assets and liabilities with valuation dates and for net worth = assets − liabilities. It also says to label user-entered, estimated and verified values, never invent rates or promise returns, and avoid double counting.
+**Decision:**
+
+- `valuations` are dated values of an investment or a **net-worth item**, which is an asset or liability that is not an account, such as a flat, land, a car, jewellery or an informal debt.
+  - Each valuation has a `source` of `USER_ENTERED` or `ESTIMATED`. `VERIFIED` is reserved and rejected by a DB CHECK until a real data source is connected.
+  - There is one valuation per target per date. Valuations are never edited; delete one and enter it again.
+- Every figure shows its **basis**: `RECORDED` (ledger) or the valuation source and date.
+- Net worth is **computed on read** by a pure domain function (`domain/wealth/net-worth.ts`), per currency:
+  - Every account is counted once, at its ledger balance on the date.
+  - An investment with a valuation is counted at the valuation **rolled forward** by money moved in or out after the valuation date, _instead of_ the ledger balance.
+  - Items count from their first valuation until they are archived (sold or settled).
+- History is the same function at month-ends (2–24 months). Daily ledger movements come from one grouped query, so no snapshots are stored and nothing can drift (ADR-004 still holds).
+- The UI always shows a "your figures, not advice" disclaimer.
+
+**Consequences:** The service layer cannot stop a user from entering a flat that they also track as an account. The UI copy warns against it, and items have no money-movement endpoints that could overlap the ledger. Verified prices need a future ADR, a connector and a migration that drops the CHECK.

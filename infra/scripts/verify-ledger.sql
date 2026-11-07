@@ -34,6 +34,21 @@ SELECT 'violations.negative_goal_progress', count(*) FROM (
     FROM goal_contributions WHERE status = 'POSTED' GROUP BY goal_id
 ) g WHERE g.saved < 0;
 
+-- 6. Loan payments whose status disagrees with their postings (both parts must
+--    be posted, or both reversed, together — Phase 8, ADR-022).
+SELECT 'violations.loan_payment_mismatch', count(*) FROM loan_payments p
+  LEFT JOIN transfers tr ON tr.id = p.transfer_id
+  LEFT JOIN transactions tx ON tx.id = p.transaction_id
+ WHERE (tr.id IS NOT NULL AND (tr.status <> p.status OR tr.amount <> p.principal))
+    OR (tx.id IS NOT NULL AND (tx.status <> p.status OR tx.amount <> p.interest));
+
+-- 7. Wealth details attached to the wrong kind of account.
+SELECT 'violations.wealth_account_type', (
+  (SELECT count(*) FROM investments i JOIN financial_accounts a ON a.id = i.account_id WHERE a.type <> 'INVESTMENT')
+  + (SELECT count(*) FROM loans l JOIN financial_accounts a ON a.id = l.account_id
+      WHERE a.type::text <> CASE WHEN l.direction = 'BORROWED' THEN 'LOAN' ELSE 'LOAN_RECEIVABLE' END)
+);
+
 -- Fingerprints (compare source vs restore).
 SELECT 'count.users', count(*) FROM users;
 SELECT 'count.journal_entries', count(*) FROM journal_entries;
@@ -41,6 +56,9 @@ SELECT 'count.journal_lines', count(*) FROM journal_lines;
 SELECT 'count.transactions', count(*) FROM transactions;
 SELECT 'count.transfers', count(*) FROM transfers;
 SELECT 'count.audit_logs', count(*) FROM audit_logs;
+SELECT 'count.loan_payments', count(*) FROM loan_payments;
+SELECT 'count.valuations', count(*) FROM valuations;
+SELECT 'count.net_worth_items', count(*) FROM net_worth_items;
 SELECT 'sum.debits_by_class.' || a.class, sum(l.debit)::text FROM journal_lines l
   JOIN ledger_accounts a ON a.id = l.ledger_account_id GROUP BY a.class ORDER BY a.class;
 SELECT 'migrations.applied', count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL;

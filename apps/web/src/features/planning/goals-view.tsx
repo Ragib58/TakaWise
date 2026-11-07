@@ -225,7 +225,7 @@ function CreateGoalForm() {
   });
   const [error, setError] = useState<string | null>(null);
   const eligible = (accounts.data ?? []).filter(
-    (a) => a.type !== 'CREDIT_CARD_TRACKING' && a.status === 'ACTIVE',
+    (a) => a.balanceType === 'ASSET' && a.status === 'ACTIVE',
   );
 
   async function onSubmit(event: React.FormEvent) {

@@ -1,4 +1,5 @@
 import type { AccountResponse } from '@takawise/contracts';
+import { ledgerClassForAccountType } from '../../domain/ledger/ledger-rules';
 import { type Money, toMoneyString } from '../../domain/money/money';
 import { toIsoDate } from '../../domain/time/local-date';
 import type { FinancialAccount } from '../../generated/prisma/client';
@@ -16,7 +17,7 @@ export function toAccountResponse(account: FinancialAccount, balance: Money): Ac
     status: account.status,
     archivedAt: account.archivedAt?.toISOString() ?? null,
     balance: toMoneyString(balance),
-    balanceType: account.type === 'CREDIT_CARD_TRACKING' ? 'LIABILITY' : 'ASSET',
+    balanceType: ledgerClassForAccountType(account.type),
     createdAt: account.createdAt.toISOString(),
   };
 }

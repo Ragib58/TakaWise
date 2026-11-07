@@ -194,22 +194,25 @@ describe('users, planning and platform tables (DB)', () => {
       contributionId = contribution.id;
     });
 
-    it('rejects linking a goal to a credit-card account', async () => {
-      const card = await createTestAccount(prisma, user.id, { type: 'CREDIT_CARD_TRACKING' });
-      expect(
-        await dbError(
-          prisma.savingsGoal.create({
-            data: {
-              userId: user.id,
-              name: 'Bad',
-              targetAmount: '1',
-              currency: 'BDT',
-              linkedAccountId: card.id,
-            },
-          }),
-        ),
-      ).toMatch(/cannot be earmarked against a credit-card/);
-    });
+    it.each(['CREDIT_CARD_TRACKING', 'LOAN'] as const)(
+      'rejects linking a goal to a liability (%s) account',
+      async (type) => {
+        const liability = await createTestAccount(prisma, user.id, { type });
+        expect(
+          await dbError(
+            prisma.savingsGoal.create({
+              data: {
+                userId: user.id,
+                name: 'Bad',
+                targetAmount: '1',
+                currency: 'BDT',
+                linkedAccountId: liability.id,
+              },
+            }),
+          ),
+        ).toMatch(/cannot be earmarked against a liability account/);
+      },
+    );
 
     it('rejects a goal currency that differs from the account', async () => {
       expect(

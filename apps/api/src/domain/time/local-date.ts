@@ -19,6 +19,19 @@ export function dateOnly(isoDate: string): Date {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
+/**
+ * An instant that falls on `isoDate` in `timeZone` (around midday), for
+ * postings the user describes by date only — e.g. a loan disbursed on its
+ * opening date.
+ */
+export function instantOnLocalDate(isoDate: string, timeZone: string): Date {
+  for (const time of ['12:00', '06:00', '18:00', '00:00', '23:59']) {
+    const candidate = new Date(`${isoDate}T${time}:00.000Z`);
+    if (localDateOf(candidate, timeZone) === isoDate) return candidate;
+  }
+  return new Date(`${isoDate}T12:00:00.000Z`);
+}
+
 /** Inverse of {@link dateOnly}. */
 export function toIsoDate(value: Date): string {
   return value.toISOString().slice(0, 10);

@@ -10,7 +10,7 @@ import { Paginated } from '../../common/envelope/paginated';
 import { uniqueViolation } from '../../common/errors/prisma-errors';
 import type { ClientContext } from '../../common/http/client-context';
 import { expenseLines, incomeLines } from '../../domain/ledger/posting-templates';
-import { parsePositiveMoney, toMoneyString, ZERO } from '../../domain/money/money';
+import { type Money, parsePositiveMoney, toMoneyString, ZERO } from '../../domain/money/money';
 import { dateOnly } from '../../domain/time/local-date';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
@@ -53,71 +53,105 @@ export class TransactionsService {
       request: input,
       responseStatus: HttpStatus.CREATED,
       run: async (tx) => {
-        const account = await tx.financialAccount.findFirst({
-          where: { id: input.accountId, userId },
-          include: { ledgerAccount: true },
-        });
-        assertPostable(account, 'accountId', input.currency);
-        await this.assertCategoryUsable(tx, userId, input.categoryId, input.type);
-
-        const occurredAt = new Date(input.occurredAt);
-        const effectiveDate = effectiveDateFor({
-          occurredAt,
-          timeZone: await userTimeZone(tx, userId),
-          openingDates: [{ field: 'occurredAt', openingDate: account.openingDate }],
-        });
-
-        const accountLedgerId = account.ledgerAccount.id;
-        const lines =
-          input.type === 'INCOME'
-            ? incomeLines(
-                accountLedgerId,
-                await this.ledger.systemAccountId(tx, userId, 'INCOME'),
-                amount,
-              )
-            : expenseLines(
-                await this.ledger.systemAccountId(tx, userId, 'EXPENSE'),
-                accountLedgerId,
-                amount,
-              );
-
-        const journal = await this.ledger.post(tx, {
-          userId,
-          kind: input.type,
-          currency: input.currency,
-          effectiveDate,
-          lines,
-        });
-        const trx = await tx.transaction.create({
-          data: {
-            userId,
-            journalEntryId: journal.id,
-            type: input.type,
-            amount: toMoneyString(amount),
-            currency: input.currency,
-            accountId: account.id,
-            categoryId: input.categoryId,
-            occurredAt,
-            effectiveDate: dateOnly(effectiveDate),
-            description: input.description || null,
-          },
-          include: transactionInclude,
-        });
-
-        await this.audit.record(
-          { action: 'transaction.posted', userId, entityType: 'transaction', entityId: trx.id },
-          client,
+        const { transaction, ledgerAccount } = await this.postInTx(
           tx,
+          userId,
+          { ...input, amount, occurredAt: new Date(input.occurredAt) },
+          client,
         );
-        await this.outbox.enqueue(tx, 'transaction.posted', userId, { transactionId: trx.id });
-
-        const balances = await this.ledger.balances(tx, [account.ledgerAccount]);
+        const balances = await this.ledger.balances(tx, [ledgerAccount]);
         return {
-          ...toTransactionResponse(trx),
-          accountBalance: toMoneyString(balances.get(accountLedgerId) ?? ZERO),
+          ...toTransactionResponse(transaction),
+          accountBalance: toMoneyString(balances.get(ledgerAccount.id) ?? ZERO),
         };
       },
     });
+  }
+
+  /**
+   * Posts an income/expense inside the caller's transaction. Used by
+   * {@link create} and by composite commands (loan payments, Phase 8) that must
+   * commit several postings atomically.
+   */
+  async postInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      type: 'INCOME' | 'EXPENSE';
+      accountId: string;
+      categoryId: string;
+      amount: Money;
+      currency: string;
+      occurredAt: Date;
+      description?: string | null;
+    },
+    client: ClientContext,
+    field = 'accountId',
+  ) {
+    const account = await tx.financialAccount.findFirst({
+      where: { id: input.accountId, userId },
+      include: { ledgerAccount: true },
+    });
+    assertPostable(account, field, input.currency);
+    await this.assertCategoryUsable(tx, userId, input.categoryId, input.type);
+
+    const effectiveDate = effectiveDateFor({
+      occurredAt: input.occurredAt,
+      timeZone: await userTimeZone(tx, userId),
+      openingDates: [{ field: 'occurredAt', openingDate: account.openingDate }],
+    });
+
+    const accountLedgerId = account.ledgerAccount.id;
+    const lines =
+      input.type === 'INCOME'
+        ? incomeLines(
+            accountLedgerId,
+            await this.ledger.systemAccountId(tx, userId, 'INCOME'),
+            input.amount,
+          )
+        : expenseLines(
+            await this.ledger.systemAccountId(tx, userId, 'EXPENSE'),
+            accountLedgerId,
+            input.amount,
+          );
+
+    const journal = await this.ledger.post(tx, {
+      userId,
+      kind: input.type,
+      currency: input.currency,
+      effectiveDate,
+      lines,
+    });
+    const transaction = await tx.transaction.create({
+      data: {
+        userId,
+        journalEntryId: journal.id,
+        type: input.type,
+        amount: toMoneyString(input.amount),
+        currency: input.currency,
+        accountId: account.id,
+        categoryId: input.categoryId,
+        occurredAt: input.occurredAt,
+        effectiveDate: dateOnly(effectiveDate),
+        description: input.description || null,
+      },
+      include: transactionInclude,
+    });
+
+    await this.audit.record(
+      {
+        action: 'transaction.posted',
+        userId,
+        entityType: 'transaction',
+        entityId: transaction.id,
+      },
+      client,
+      tx,
+    );
+    await this.outbox.enqueue(tx, 'transaction.posted', userId, {
+      transactionId: transaction.id,
+    });
+    return { transaction, ledgerAccount: account.ledgerAccount, effectiveDate };
   }
 
   async list(
@@ -182,46 +216,19 @@ export class TransactionsService {
         request: { id, ...input },
         responseStatus: HttpStatus.OK,
         run: async (tx) => {
-          const original = await tx.transaction.findFirst({
-            where: { id, userId },
-            include: { account: { include: { ledgerAccount: true } } },
-          });
-          if (!original) throw notFound('Transaction');
-          if (original.status !== 'POSTED')
-            throw conflict('This transaction has already been reversed.');
-
-          const reversal = await this.ledger.reverse(
+          // Part of a loan payment: reversing only half would leave the payment inconsistent.
+          if (await tx.loanPayment.findFirst({ where: { transactionId: id, userId } })) {
+            throw conflict(
+              'This interest entry belongs to a loan payment. Reverse the payment from the loan instead.',
+            );
+          }
+          const { updated, ledgerAccount } = await this.reverseInTx(
             tx,
             userId,
-            original.journalEntryId,
+            id,
             input.reason,
-          );
-          const updated = await tx.transaction.update({
-            where: { id: original.id },
-            data: {
-              status: 'REVERSED',
-              reversalJournalEntryId: reversal.id,
-              reversedAt: new Date(),
-            },
-            include: transactionInclude,
-          });
-
-          await this.audit.record(
-            {
-              action: 'transaction.reversed',
-              userId,
-              entityType: 'transaction',
-              entityId: original.id,
-              metadata: input.reason ? { hasReason: true } : undefined,
-            },
             client,
-            tx,
           );
-          await this.outbox.enqueue(tx, 'transaction.reversed', userId, {
-            transactionId: original.id,
-          });
-
-          const ledgerAccount = original.account.ledgerAccount!;
           const balances = await this.ledger.balances(tx, [ledgerAccount]);
           return {
             ...toTransactionResponse(updated),
@@ -236,6 +243,43 @@ export class TransactionsService {
       }
       throw error;
     }
+  }
+
+  /** Compensating reversal inside the caller's transaction (ADR-010). */
+  async reverseInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    id: string,
+    reason: string | undefined,
+    client: ClientContext,
+  ) {
+    const original = await tx.transaction.findFirst({
+      where: { id, userId },
+      include: { account: { include: { ledgerAccount: true } } },
+    });
+    if (!original) throw notFound('Transaction');
+    if (original.status !== 'POSTED') throw conflict('This transaction has already been reversed.');
+
+    const reversal = await this.ledger.reverse(tx, userId, original.journalEntryId, reason);
+    const updated = await tx.transaction.update({
+      where: { id: original.id },
+      data: { status: 'REVERSED', reversalJournalEntryId: reversal.id, reversedAt: new Date() },
+      include: transactionInclude,
+    });
+
+    await this.audit.record(
+      {
+        action: 'transaction.reversed',
+        userId,
+        entityType: 'transaction',
+        entityId: original.id,
+        metadata: reason ? { hasReason: true } : undefined,
+      },
+      client,
+      tx,
+    );
+    await this.outbox.enqueue(tx, 'transaction.reversed', userId, { transactionId: original.id });
+    return { updated, ledgerAccount: original.account.ledgerAccount! };
   }
 
   /** CAT-01: system categories or the user's own, active, of the matching type. */

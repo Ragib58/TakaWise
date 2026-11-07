@@ -7,13 +7,18 @@ import type {
 import { AppException } from '../../common/errors/app.exception';
 import { uniqueViolation } from '../../common/errors/prisma-errors';
 import type { ClientContext } from '../../common/http/client-context';
-import { ledgerClassForAccountType, normalBalanceFor } from '../../domain/ledger/ledger-rules';
+import {
+  ledgerClassForAccountType,
+  normalBalanceFor,
+  WEALTH_ACCOUNT_TYPES,
+} from '../../domain/ledger/ledger-rules';
 import { openingBalanceLines } from '../../domain/ledger/posting-templates';
 import { parseMoney, ZERO } from '../../domain/money/money';
 import { dateOnly, localDateOf } from '../../domain/time/local-date';
 import { invalid, userTimeZone } from '../transactions/posting-rules';
 import { PrismaService } from '../../database/prisma.service';
 import type { FinancialAccount, Prisma } from '../../generated/prisma/client';
+import type { FinancialAccountType } from '../../generated/prisma/enums';
 import { AuditService } from '../audit/audit.service';
 import { IdempotencyService, type IdempotentResult } from '../idempotency/idempotency.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -24,6 +29,10 @@ type CreateAccountInput = Omit<CreateAccountRequest, 'currency' | 'openingBalanc
   currency: string;
   openingBalance: string;
 };
+
+export function mapAccountConflictError(error: unknown): unknown {
+  return mapAccountConflict(error);
+}
 
 export function accountNotFound(): AppException {
   return new AppException('NOT_FOUND', 'Account not found.', HttpStatus.NOT_FOUND);
@@ -46,9 +55,6 @@ export class AccountsService {
     idempotencyKey: string,
     client: ClientContext,
   ): Promise<IdempotentResult<AccountResponse>> {
-    const openingBalance = parseMoney(input.openingBalance);
-    const cls = ledgerClassForAccountType(input.type);
-
     try {
       return await this.idempotency.execute({
         userId,
@@ -57,61 +63,7 @@ export class AccountsService {
         request: input,
         responseStatus: HttpStatus.CREATED,
         run: async (tx) => {
-          const today = localDateOf(new Date(), await userTimeZone(tx, userId));
-          if (input.openingDate > today) {
-            throw invalid([
-              { field: 'openingDate', message: 'The opening date cannot be in the future' },
-            ]);
-          }
-          const account = await tx.financialAccount.create({
-            data: {
-              userId,
-              name: input.name,
-              type: input.type,
-              currency: input.currency,
-              openingDate: dateOnly(input.openingDate),
-              openingBalance: input.openingBalance,
-              institutionName: input.institutionName ?? null,
-              creditLimit: input.creditLimit ?? null,
-              ledgerAccount: {
-                create: { class: cls, normalBalance: normalBalanceFor(cls), name: input.name },
-              },
-            },
-            include: { ledgerAccount: true },
-          });
-          const ledgerAccount = account.ledgerAccount!;
-
-          if (!openingBalance.isZero()) {
-            await this.ledger.post(tx, {
-              userId,
-              kind: 'OPENING_BALANCE',
-              currency: account.currency,
-              effectiveDate: input.openingDate,
-              memo: 'Opening balance',
-              lines: openingBalanceLines({
-                accountClass: cls,
-                accountLedgerId: ledgerAccount.id,
-                openingEquityLedgerId: await this.ledger.systemAccountId(
-                  tx,
-                  userId,
-                  'EQUITY_OPENING_BALANCE',
-                ),
-                amount: openingBalance,
-              }),
-            });
-          }
-
-          await this.audit.record(
-            {
-              action: 'account.created',
-              userId,
-              entityType: 'financial_account',
-              entityId: account.id,
-            },
-            client,
-            tx,
-          );
-          await this.outbox.enqueue(tx, 'account.created', userId, { accountId: account.id });
+          const { account, openingBalance } = await this.createInTx(tx, userId, input, client);
           return toAccountResponse(account, openingBalance);
         },
       });
@@ -120,9 +72,99 @@ export class AccountsService {
     }
   }
 
-  async list(userId: string, status: 'ACTIVE' | 'ARCHIVED' | 'ALL'): Promise<AccountResponse[]> {
+  /**
+   * Creates the account, its ledger account and (if non-zero) the
+   * OPENING_BALANCE journal inside the caller's transaction. Phase 8 modules
+   * use it for INVESTMENT / LOAN / LOAN_RECEIVABLE accounts.
+   */
+  async createInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      name: string;
+      type: FinancialAccountType;
+      currency: string;
+      openingDate: string;
+      openingBalance: string;
+      institutionName?: string | null;
+      creditLimit?: string | null;
+    },
+    client: ClientContext,
+  ) {
+    const openingBalance = parseMoney(input.openingBalance);
+    const cls = ledgerClassForAccountType(input.type);
+    const today = localDateOf(new Date(), await userTimeZone(tx, userId));
+    if (input.openingDate > today) {
+      throw invalid([
+        { field: 'openingDate', message: 'The opening date cannot be in the future' },
+      ]);
+    }
+    const account = await tx.financialAccount.create({
+      data: {
+        userId,
+        name: input.name,
+        type: input.type,
+        currency: input.currency,
+        openingDate: dateOnly(input.openingDate),
+        openingBalance: input.openingBalance,
+        institutionName: input.institutionName || null,
+        creditLimit: input.creditLimit ?? null,
+        ledgerAccount: {
+          create: { class: cls, normalBalance: normalBalanceFor(cls), name: input.name },
+        },
+      },
+      include: { ledgerAccount: true },
+    });
+    const ledgerAccount = account.ledgerAccount!;
+
+    if (!openingBalance.isZero()) {
+      await this.ledger.post(tx, {
+        userId,
+        kind: 'OPENING_BALANCE',
+        currency: account.currency,
+        effectiveDate: input.openingDate,
+        memo: 'Opening balance',
+        lines: openingBalanceLines({
+          accountClass: cls,
+          accountLedgerId: ledgerAccount.id,
+          openingEquityLedgerId: await this.ledger.systemAccountId(
+            tx,
+            userId,
+            'EQUITY_OPENING_BALANCE',
+          ),
+          amount: openingBalance,
+        }),
+      });
+    }
+
+    await this.audit.record(
+      {
+        action: 'account.created',
+        userId,
+        entityType: 'financial_account',
+        entityId: account.id,
+        metadata: { type: input.type },
+      },
+      client,
+      tx,
+    );
+    await this.outbox.enqueue(tx, 'account.created', userId, { accountId: account.id });
+    return { account, ledgerAccount, openingBalance };
+  }
+
+  async list(
+    userId: string,
+    status: 'ACTIVE' | 'ARCHIVED' | 'ALL',
+    group: 'EVERYDAY' | 'WEALTH' | 'ALL' = 'ALL',
+  ): Promise<AccountResponse[]> {
+    const wealthTypes = [...WEALTH_ACCOUNT_TYPES];
     const accounts = await this.prisma.financialAccount.findMany({
-      where: { userId, ...(status === 'ALL' ? {} : { status }) },
+      where: {
+        userId,
+        ...(status === 'ALL' ? {} : { status }),
+        ...(group === 'EVERYDAY' ? { type: { notIn: wealthTypes } } : {}),
+        ...(group === 'WEALTH' ? { type: { in: wealthTypes } } : {}),
+      },
       include: { ledgerAccount: true },
       orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
     });

@@ -105,6 +105,7 @@ Then open http://localhost:3100, http://localhost:4000/api/v1/health and http://
 - Financial commands (`POST /accounts`, `/transactions`, `/transfers`, `…/reverse`, goal contributions) require an `Idempotency-Key: <uuid>` header. See [docs/api/ledger.md](docs/api/ledger.md) for posting rules, balances and errors.
 - Budgets, savings goals (earmark model), reminders, notifications and background jobs: [docs/api/planning.md](docs/api/planning.md).
 - Dashboard, reports and CSV export: [docs/api/reports.md](docs/api/reports.md).
+- Investments, loans, net-worth items and net worth (Phase 8): [docs/api/wealth.md](docs/api/wealth.md). Rates, valuations and schedules are the user's own figures; nothing is fetched or invented.
 
 ## End-to-end tests
 

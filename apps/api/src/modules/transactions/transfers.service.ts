@@ -9,7 +9,7 @@ import { Paginated } from '../../common/envelope/paginated';
 import { uniqueViolation } from '../../common/errors/prisma-errors';
 import type { ClientContext } from '../../common/http/client-context';
 import { transferLines } from '../../domain/ledger/posting-templates';
-import { parsePositiveMoney, toMoneyString } from '../../domain/money/money';
+import { type Money, parsePositiveMoney, toMoneyString } from '../../domain/money/money';
 import { dateOnly } from '../../domain/time/local-date';
 import { PrismaService } from '../../database/prisma.service';
 import type { Prisma } from '../../generated/prisma/client';
@@ -55,57 +55,114 @@ export class TransfersService {
       request: input,
       responseStatus: HttpStatus.CREATED,
       run: async (tx) => {
-        const load = (id: string) =>
-          tx.financialAccount.findFirst({
-            where: { id, userId },
-            include: { ledgerAccount: true },
-          });
-        const source = await load(input.sourceAccountId);
-        assertPostable(source, 'sourceAccountId', input.currency);
-        const destination = await load(input.destinationAccountId);
-        assertPostable(destination, 'destinationAccountId', input.currency);
-
-        const occurredAt = new Date(input.occurredAt);
-        const effectiveDate = effectiveDateFor({
-          occurredAt,
-          timeZone: await userTimeZone(tx, userId),
-          openingDates: [
-            { field: 'occurredAt', openingDate: source.openingDate },
-            { field: 'occurredAt', openingDate: destination.openingDate },
-          ],
-        });
-
-        const journal = await this.ledger.post(tx, {
-          userId,
-          kind: 'TRANSFER',
-          currency: input.currency,
-          effectiveDate,
-          lines: transferLines(source.ledgerAccount.id, destination.ledgerAccount.id, amount),
-        });
-        const transfer = await tx.transfer.create({
-          data: {
-            userId,
-            journalEntryId: journal.id,
-            sourceAccountId: source.id,
-            destinationAccountId: destination.id,
-            amount: toMoneyString(amount),
-            currency: input.currency,
-            occurredAt,
-            effectiveDate: dateOnly(effectiveDate),
-            description: input.description || null,
-          },
-          include: transferInclude,
-        });
-
-        await this.audit.record(
-          { action: 'transfer.posted', userId, entityType: 'transfer', entityId: transfer.id },
-          client,
+        const transfer = await this.postInTx(
           tx,
+          userId,
+          { ...input, amount, occurredAt: new Date(input.occurredAt) },
+          client,
         );
-        await this.outbox.enqueue(tx, 'transfer.posted', userId, { transferId: transfer.id });
         return toTransferResponse(transfer);
       },
     });
+  }
+
+  /**
+   * Posts a transfer inside the caller's transaction. Used by {@link create}
+   * and by Phase 8 commands (funding an investment, disbursing or repaying a
+   * loan) so the business record and the posting commit together.
+   */
+  async postInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: {
+      sourceAccountId: string;
+      destinationAccountId: string;
+      amount: Money;
+      currency: string;
+      occurredAt: Date;
+      description?: string | null;
+    },
+    client: ClientContext,
+    fields: { source: string; destination: string } = {
+      source: 'sourceAccountId',
+      destination: 'destinationAccountId',
+    },
+  ) {
+    const load = (id: string) =>
+      tx.financialAccount.findFirst({
+        where: { id, userId },
+        include: { ledgerAccount: true },
+      });
+    const source = await load(input.sourceAccountId);
+    assertPostable(source, fields.source, input.currency);
+    const destination = await load(input.destinationAccountId);
+    assertPostable(destination, fields.destination, input.currency);
+
+    const effectiveDate = effectiveDateFor({
+      occurredAt: input.occurredAt,
+      timeZone: await userTimeZone(tx, userId),
+      openingDates: [
+        { field: 'occurredAt', openingDate: source.openingDate },
+        { field: 'occurredAt', openingDate: destination.openingDate },
+      ],
+    });
+
+    const journal = await this.ledger.post(tx, {
+      userId,
+      kind: 'TRANSFER',
+      currency: input.currency,
+      effectiveDate,
+      lines: transferLines(source.ledgerAccount.id, destination.ledgerAccount.id, input.amount),
+    });
+    const transfer = await tx.transfer.create({
+      data: {
+        userId,
+        journalEntryId: journal.id,
+        sourceAccountId: source.id,
+        destinationAccountId: destination.id,
+        amount: toMoneyString(input.amount),
+        currency: input.currency,
+        occurredAt: input.occurredAt,
+        effectiveDate: dateOnly(effectiveDate),
+        description: input.description || null,
+      },
+      include: transferInclude,
+    });
+
+    await this.audit.record(
+      { action: 'transfer.posted', userId, entityType: 'transfer', entityId: transfer.id },
+      client,
+      tx,
+    );
+    await this.outbox.enqueue(tx, 'transfer.posted', userId, { transferId: transfer.id });
+    return transfer;
+  }
+
+  /** Compensating reversal inside the caller's transaction (ADR-010). */
+  async reverseInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    id: string,
+    reason: string | undefined,
+    client: ClientContext,
+  ) {
+    const original = await tx.transfer.findFirst({ where: { id, userId } });
+    if (!original) throw notFound('Transfer');
+    if (original.status !== 'POSTED') throw conflict('This transfer has already been reversed.');
+
+    const reversal = await this.ledger.reverse(tx, userId, original.journalEntryId, reason);
+    const updated = await tx.transfer.update({
+      where: { id: original.id },
+      data: { status: 'REVERSED', reversalJournalEntryId: reversal.id, reversedAt: new Date() },
+      include: transferInclude,
+    });
+    await this.audit.record(
+      { action: 'transfer.reversed', userId, entityType: 'transfer', entityId: original.id },
+      client,
+      tx,
+    );
+    await this.outbox.enqueue(tx, 'transfer.reversed', userId, { transferId: original.id });
+    return updated;
   }
 
   async list(userId: string, query: ListTransfersQuery): Promise<Paginated<TransferResponse>> {
@@ -162,33 +219,13 @@ export class TransfersService {
         request: { id, ...input },
         responseStatus: HttpStatus.OK,
         run: async (tx) => {
-          const original = await tx.transfer.findFirst({ where: { id, userId } });
-          if (!original) throw notFound('Transfer');
-          if (original.status !== 'POSTED')
-            throw conflict('This transfer has already been reversed.');
-
-          const reversal = await this.ledger.reverse(
-            tx,
-            userId,
-            original.journalEntryId,
-            input.reason,
-          );
-          const updated = await tx.transfer.update({
-            where: { id: original.id },
-            data: {
-              status: 'REVERSED',
-              reversalJournalEntryId: reversal.id,
-              reversedAt: new Date(),
-            },
-            include: transferInclude,
-          });
-          await this.audit.record(
-            { action: 'transfer.reversed', userId, entityType: 'transfer', entityId: original.id },
-            client,
-            tx,
-          );
-          await this.outbox.enqueue(tx, 'transfer.reversed', userId, { transferId: original.id });
-          return toTransferResponse(updated);
+          // Part of a loan payment: reversing only half would leave the payment inconsistent.
+          if (await tx.loanPayment.findFirst({ where: { transferId: id, userId } })) {
+            throw conflict(
+              'This transfer belongs to a loan payment. Reverse the payment from the loan instead.',
+            );
+          }
+          return toTransferResponse(await this.reverseInTx(tx, userId, id, input.reason, client));
         },
       });
     } catch (error) {

@@ -57,9 +57,12 @@ const FINANCE_KEYS = [
   ['reports'],
   ['budgets'],
   ['goals'],
+  ['investments'],
+  ['loans'],
+  ['net-worth'],
 ];
 
-function useInvalidateFinance() {
+export function useInvalidateFinance() {
   const qc = useQueryClient();
   return () => Promise.all(FINANCE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
 }
@@ -121,10 +124,13 @@ export async function downloadTransactionsCsv(range: {
 
 // ─────────────────────────────── Accounts ───────────────────────────────
 
-export const useAccountList = (status: 'ACTIVE' | 'ALL' = 'ACTIVE') =>
+export const useAccountList = (
+  status: 'ACTIVE' | 'ALL' = 'ACTIVE',
+  group: 'EVERYDAY' | 'WEALTH' | 'ALL' = 'ALL',
+) =>
   useQuery({
-    queryKey: ['accounts', status],
-    queryFn: () => get<AccountResponse[]>(`/accounts?status=${status}`),
+    queryKey: ['accounts', status, group],
+    queryFn: () => get<AccountResponse[]>(`/accounts${qs({ status, group })}`),
   });
 
 export function useCreateAccount() {

@@ -9,62 +9,67 @@ export type SeedSummary = { ledgerTemplates: number; categories: number };
  * run on every deploy. Upserts by stable keys so ids never change.
  */
 export async function runSeed(prisma: PrismaClient): Promise<SeedSummary> {
-  return prisma.$transaction(async (tx) => {
-    for (const account of SYSTEM_LEDGER_ACCOUNTS) {
-      const data = {
-        class: account.class,
-        normalBalance: normalBalanceFor(account.class),
-        nameEn: account.nameEn,
-        nameBn: account.nameBn,
-      };
-      await tx.ledgerAccountTemplate.upsert({
-        where: { code: account.code },
-        create: { code: account.code, ...data },
-        update: data,
-      });
-    }
-
-    let categories = 0;
-    for (const [index, root] of SYSTEM_CATEGORIES.entries()) {
-      const parent = await tx.category.upsert({
-        where: { systemKey: root.key },
-        create: {
-          systemKey: root.key,
-          isSystem: true,
-          type: root.type,
-          nameEn: root.nameEn,
-          nameBn: root.nameBn,
-          icon: root.icon,
-          sortOrder: index * 10,
-        },
-        update: {
-          type: root.type,
-          nameEn: root.nameEn,
-          nameBn: root.nameBn,
-          icon: root.icon,
-          sortOrder: index * 10,
-        },
-      });
-      categories += 1;
-
-      for (const [childIndex, child] of (root.children ?? []).entries()) {
+  return prisma.$transaction(
+    async (tx) => {
+      for (const account of SYSTEM_LEDGER_ACCOUNTS) {
         const data = {
-          type: root.type,
-          parentId: parent.id,
-          nameEn: child.nameEn,
-          nameBn: child.nameBn,
-          icon: child.icon,
-          sortOrder: index * 10 + childIndex + 1,
+          class: account.class,
+          normalBalance: normalBalanceFor(account.class),
+          nameEn: account.nameEn,
+          nameBn: account.nameBn,
         };
-        await tx.category.upsert({
-          where: { systemKey: child.key },
-          create: { systemKey: child.key, isSystem: true, ...data },
+        await tx.ledgerAccountTemplate.upsert({
+          where: { code: account.code },
+          create: { code: account.code, ...data },
           update: data,
         });
-        categories += 1;
       }
-    }
 
-    return { ledgerTemplates: SYSTEM_LEDGER_ACCOUNTS.length, categories };
-  });
+      let categories = 0;
+      for (const [index, root] of SYSTEM_CATEGORIES.entries()) {
+        const parent = await tx.category.upsert({
+          where: { systemKey: root.key },
+          create: {
+            systemKey: root.key,
+            isSystem: true,
+            type: root.type,
+            nameEn: root.nameEn,
+            nameBn: root.nameBn,
+            icon: root.icon,
+            sortOrder: index * 10,
+          },
+          update: {
+            type: root.type,
+            nameEn: root.nameEn,
+            nameBn: root.nameBn,
+            icon: root.icon,
+            sortOrder: index * 10,
+          },
+        });
+        categories += 1;
+
+        for (const [childIndex, child] of (root.children ?? []).entries()) {
+          const data = {
+            type: root.type,
+            parentId: parent.id,
+            nameEn: child.nameEn,
+            nameBn: child.nameBn,
+            icon: child.icon,
+            sortOrder: index * 10 + childIndex + 1,
+          };
+          await tx.category.upsert({
+            where: { systemKey: child.key },
+            create: { systemKey: child.key, isSystem: true, ...data },
+            update: data,
+          });
+          categories += 1;
+        }
+      }
+
+      return { ledgerTemplates: SYSTEM_LEDGER_ACCOUNTS.length, categories };
+    },
+    // ~40 sequential upserts: allow for a busy machine (CI, parallel test runs)
+    // instead of Prisma's 5 s default. Still one atomic transaction.
+    { timeout: 30_000, maxWait: 10_000 },
+  );
 }

@@ -2,20 +2,25 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  ACCOUNT_TYPES,
   type AccountResponse,
+  type AccountType,
   createAccountRequestSchema,
   createTransferRequestSchema,
+  EVERYDAY_ACCOUNT_TYPES,
 } from '@takawise/contracts';
 import {
   ArrowLeftRight,
   Archive,
   ArchiveRestore,
   CreditCard,
+  HandCoins,
   Landmark,
+  type LucideIcon,
   Smartphone,
+  TrendingUp,
   Wallet,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { z } from 'zod';
@@ -31,19 +36,23 @@ import { formatMoney } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n/use-t';
 import { useAccountList, useArchiveAccount, useCreateAccount, useCreateTransfer } from './queries';
 
-const ICONS = {
+const ICONS: Record<AccountType, LucideIcon> = {
   CASH: Wallet,
   BANK: Landmark,
   MOBILE_WALLET: Smartphone,
   SAVINGS: Landmark,
   CREDIT_CARD_TRACKING: CreditCard,
   OTHER: Wallet,
+  INVESTMENT: TrendingUp,
+  LOAN: HandCoins,
+  LOAN_RECEIVABLE: HandCoins,
 };
 
 export function AccountsView() {
   const t = useT();
   const [showArchived, setShowArchived] = useState(false);
-  const accounts = useAccountList(showArchived ? 'ALL' : 'ACTIVE');
+  // Investments and loans live on their own pages (Phase 8).
+  const accounts = useAccountList(showArchived ? 'ALL' : 'ACTIVE', 'EVERYDAY');
 
   return (
     <div className="flex flex-col gap-4">
@@ -73,6 +82,16 @@ export function AccountsView() {
           ))}
         </ul>
       )}
+      <p className="text-sm text-muted-foreground">
+        {t('accounts.wealthHint')}{' '}
+        <Link className="underline" href="/app/investments">
+          {t('nav.investments')}
+        </Link>
+        {' · '}
+        <Link className="underline" href="/app/loans">
+          {t('nav.loans')}
+        </Link>
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <CreateAccountForm />
         {accounts.data && accounts.data.filter((a) => a.status === 'ACTIVE').length >= 2 ? (
@@ -189,7 +208,7 @@ function CreateAccountForm() {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="account-type">{t('accounts.type')}</Label>
           <Select id="account-type" {...form.register('type')}>
-            {ACCOUNT_TYPES.map((value) => (
+            {EVERYDAY_ACCOUNT_TYPES.map((value) => (
               <option key={value} value={value}>
                 {t(`accounts.type.${value}`)}
               </option>

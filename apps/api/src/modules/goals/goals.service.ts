@@ -16,6 +16,7 @@ import {
   toMoneyString,
   ZERO,
 } from '../../domain/money/money';
+import { ledgerClassForAccountType } from '../../domain/ledger/ledger-rules';
 import { goalProgress, savedAmount, unallocated } from '../../domain/planning/goal-math';
 import { dateOnly, localDateOf, toIsoDate } from '../../domain/time/local-date';
 import { PrismaService } from '../../database/prisma.service';
@@ -85,10 +86,10 @@ export class GoalsService {
       where: { id: input.linkedAccountId, userId },
     });
     if (!account) throw notFound('Account');
-    if (account.type === 'CREDIT_CARD_TRACKING') {
+    if (ledgerClassForAccountType(account.type) === 'LIABILITY') {
       throw invalid(
         'linkedAccountId',
-        'Choose a cash, bank, wallet or savings account — not a credit card',
+        'Choose a cash, bank, wallet or savings account — not a credit card or loan',
       );
     }
     if (account.status !== 'ACTIVE') throw conflict('This account is archived.', 'linkedAccountId');

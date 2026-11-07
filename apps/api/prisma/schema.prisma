@@ -52,6 +52,51 @@ enum FinancialAccountType {
   SAVINGS
   CREDIT_CARD_TRACKING
   OTHER
+  /// Phase 8 (ADR-022): created only through /investments and /loans.
+  INVESTMENT
+  /// Money the user owes (liability).
+  LOAN
+  /// Money the user lent to someone (asset).
+  LOAN_RECEIVABLE
+}
+
+enum InvestmentKind {
+  DPS
+  FDR
+  SAVINGS_CERTIFICATE
+  BOND
+  STOCK
+  MUTUAL_FUND
+  GOLD
+  OTHER
+}
+
+enum LoanDirection {
+  BORROWED
+  LENT
+}
+
+/// How a value was obtained (ADR-023). VERIFIED is reserved for a future
+/// connected data source; the database rejects it until one exists.
+enum ValuationSource {
+  USER_ENTERED
+  ESTIMATED
+  VERIFIED
+}
+
+enum NetWorthSide {
+  ASSET
+  LIABILITY
+}
+
+enum NetWorthItemKind {
+  REAL_ESTATE
+  VEHICLE
+  JEWELLERY
+  BUSINESS
+  OTHER_ASSET
+  PERSONAL_DEBT
+  OTHER_LIABILITY
 }
 
 enum ArchiveStatus {
@@ -176,6 +221,11 @@ model User {
   reminders          Reminder[]
   notifications      Notification[]
   files              FileObject[]
+  investments        Investment[]
+  loans              Loan[]
+  loanPayments       LoanPayment[]
+  valuations         Valuation[]
+  netWorthItems      NetWorthItem[]
 
   @@map("users")
 }
@@ -265,6 +315,8 @@ model FinancialAccount {
   outgoingTransfers Transfer[]     @relation("TransferSource")
   incomingTransfers Transfer[]     @relation("TransferDestination")
   savingsGoals      SavingsGoal[]
+  investment        Investment?
+  loan              Loan?
 
   @@unique([id, userId])
   @@index([userId, status])
@@ -382,7 +434,9 @@ model Transaction {
   reversalJournal JournalEntry?    @relation("TransactionReversalJournal", fields: [reversalJournalEntryId, userId], references: [id, userId], onDelete: Restrict)
   account         FinancialAccount @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
   category        Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  loanPayment     LoanPayment?
 
+  @@unique([id, userId])
   @@unique([journalEntryId, userId])
   @@unique([reversalJournalEntryId, userId])
   @@index([userId, effectiveDate])
@@ -419,7 +473,9 @@ model Transfer {
   reversalJournal    JournalEntry?    @relation("TransferReversalJournal", fields: [reversalJournalEntryId, userId], references: [id, userId], onDelete: Restrict)
   sourceAccount      FinancialAccount @relation("TransferSource", fields: [sourceAccountId, userId], references: [id, userId], onDelete: Restrict)
   destinationAccount FinancialAccount @relation("TransferDestination", fields: [destinationAccountId, userId], references: [id, userId], onDelete: Restrict)
+  loanPayment        LoanPayment?
 
+  @@unique([id, userId])
   @@unique([journalEntryId, userId])
   @@unique([reversalJournalEntryId, userId])
   @@index([userId, effectiveDate])
@@ -561,6 +617,137 @@ model GoalContribution {
   @@index([goalId, contributedOn])
   @@index([userId])
   @@map("goal_contributions")
+}
+
+// ──────────────────── Wealth (Phase 8, ADR-022/023) ───────────────────
+
+/// Details of an INVESTMENT account. Money in/out is ordinary transfers and
+/// income on that account, so the ledger stays the single source of truth.
+/// Rates and maturity values are the user's own figures — never fetched or invented.
+model Investment {
+  accountId             String         @id @map("account_id") @db.Uuid
+  userId                String         @map("user_id") @db.Uuid
+  kind                  InvestmentKind
+  maturityDate          DateTime?      @map("maturity_date") @db.Date
+  /// User-entered annual rate in percent (assumption, e.g. 9.5000).
+  interestRate          Decimal?       @map("interest_rate") @db.Decimal(7, 4)
+  /// User-entered estimate of the value at maturity.
+  expectedMaturityValue Decimal?       @map("expected_maturity_value") @db.Decimal(20, 4)
+  /// Units held (shares, grams, bhori...) for stocks, funds and gold.
+  quantity              Decimal?       @db.Decimal(24, 8)
+  quantityUnit          String?        @map("quantity_unit") @db.VarChar(20)
+  notes                 String?        @db.VarChar(500)
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  account    FinancialAccount @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+  valuations Valuation[]
+
+  @@unique([accountId, userId])
+  @@index([userId])
+  @@map("investments")
+}
+
+/// Details of a LOAN (borrowed, liability) or LOAN_RECEIVABLE (lent, asset)
+/// account. The outstanding amount is the ledger balance of that account.
+model Loan {
+  accountId        String        @id @map("account_id") @db.Uuid
+  userId           String        @map("user_id") @db.Uuid
+  direction        LoanDirection
+  /// Lender (borrowed) or borrower (lent), as the user names them.
+  counterparty     String?       @db.VarChar(100)
+  /// Original amount of the loan.
+  principal        Decimal       @db.Decimal(20, 4)
+  /// User-entered annual rate in percent; drives the estimated schedule only.
+  interestRate     Decimal?      @map("interest_rate") @db.Decimal(7, 4)
+  termMonths       Int?          @map("term_months")
+  firstPaymentDate DateTime?     @map("first_payment_date") @db.Date
+  notes            String?       @db.VarChar(500)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  account  FinancialAccount @relation(fields: [accountId, userId], references: [id, userId], onDelete: Restrict)
+  payments LoanPayment[]
+
+  @@unique([accountId, userId])
+  @@index([userId])
+  @@map("loans")
+}
+
+/// One repayment: a principal TRANSFER and/or an interest INCOME/EXPENSE
+/// transaction, posted together. Reversal reverses both.
+model LoanPayment {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  userId        String        @map("user_id") @db.Uuid
+  loanId        String        @map("loan_id") @db.Uuid
+  transferId    String?       @unique @map("transfer_id") @db.Uuid
+  transactionId String?       @unique @map("transaction_id") @db.Uuid
+  principal     Decimal       @db.Decimal(20, 4)
+  interest      Decimal       @db.Decimal(20, 4)
+  currency      String        @db.Char(3)
+  paidOn        DateTime      @map("paid_on") @db.Date
+  status        PostingStatus @default(POSTED)
+  reversedAt    DateTime?     @map("reversed_at") @db.Timestamptz(3)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  loan        Loan         @relation(fields: [loanId, userId], references: [accountId, userId], onDelete: Restrict)
+  transfer    Transfer?    @relation(fields: [transferId, userId], references: [id, userId], onDelete: Restrict)
+  transaction Transaction? @relation(fields: [transactionId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@unique([transferId, userId])
+  @@unique([transactionId, userId])
+  @@index([loanId, paidOn])
+  @@index([userId])
+  @@map("loan_payments")
+}
+
+/// Assets and liabilities that are not accounts (a flat, land, a car,
+/// jewellery, an informal debt). Their value comes only from valuations.
+model NetWorthItem {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  userId     String           @map("user_id") @db.Uuid
+  side       NetWorthSide
+  kind       NetWorthItemKind
+  name       String           @db.VarChar(100)
+  currency   String           @db.Char(3)
+  notes      String?          @db.VarChar(500)
+  status     ArchiveStatus    @default(ACTIVE)
+  archivedAt DateTime?        @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  valuations Valuation[]
+
+  @@unique([id, userId])
+  @@index([userId, status])
+  @@map("net_worth_items")
+}
+
+/// A dated value of an investment or a net-worth item. Exactly one target is set.
+model Valuation {
+  id           String          @id @default(uuid(7)) @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  investmentId String?         @map("investment_id") @db.Uuid
+  itemId       String?         @map("item_id") @db.Uuid
+  value        Decimal         @db.Decimal(20, 4)
+  currency     String          @db.Char(3)
+  valuedOn     DateTime        @map("valued_on") @db.Date
+  source       ValuationSource
+  note         String?         @db.VarChar(255)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  investment Investment?   @relation(fields: [investmentId, userId], references: [accountId, userId], onDelete: Restrict)
+  item       NetWorthItem? @relation(fields: [itemId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([investmentId, valuedOn])
+  @@index([itemId, valuedOn])
+  @@map("valuations")
 }
 
 model Reminder {

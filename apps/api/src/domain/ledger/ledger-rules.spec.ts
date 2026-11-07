@@ -20,9 +20,18 @@ describe('normal balance rules', () => {
     expect(normalBalanceFor(cls)).toBe(normal);
   });
 
-  it('maps credit cards to LIABILITY and everything else to ASSET', () => {
+  it('maps credit cards and borrowed loans to LIABILITY and everything else to ASSET', () => {
     expect(ledgerClassForAccountType('CREDIT_CARD_TRACKING')).toBe('LIABILITY');
-    for (const type of ['CASH', 'BANK', 'MOBILE_WALLET', 'SAVINGS', 'OTHER'] as const) {
+    expect(ledgerClassForAccountType('LOAN')).toBe('LIABILITY');
+    for (const type of [
+      'CASH',
+      'BANK',
+      'MOBILE_WALLET',
+      'SAVINGS',
+      'OTHER',
+      'INVESTMENT',
+      'LOAN_RECEIVABLE',
+    ] as const) {
       expect(ledgerClassForAccountType(type)).toBe('ASSET');
     }
   });

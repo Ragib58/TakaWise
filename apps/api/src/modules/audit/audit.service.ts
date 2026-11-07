@@ -47,7 +47,20 @@ export type AuditAction =
   | 'reminder.updated'
   | 'reminder.completed'
   | 'reminder.cancelled'
-  | 'export.transactions';
+  | 'export.transactions'
+  // Phase 8: wealth modules
+  | 'investment.created'
+  | 'investment.updated'
+  | 'loan.created'
+  | 'loan.updated'
+  | 'loan.payment.posted'
+  | 'loan.payment.reversed'
+  | 'net_worth_item.created'
+  | 'net_worth_item.updated'
+  | 'net_worth_item.archived'
+  | 'net_worth_item.restored'
+  | 'valuation.created'
+  | 'valuation.deleted';
 
 export type AuditEvent = {
   action: AuditAction;

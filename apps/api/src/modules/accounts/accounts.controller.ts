@@ -43,7 +43,7 @@ export class AccountsController {
     @CurrentUser() auth: AuthContext,
     @Query() query: ListAccountsQueryDto,
   ): Promise<AccountResponse[]> {
-    return this.accounts.list(auth.userId, query.status);
+    return this.accounts.list(auth.userId, query.status, query.group);
   }
 
   @Post()

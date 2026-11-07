@@ -17,6 +17,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { PlanningModule } from './modules/planning.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { WealthModule } from './modules/wealth/wealth.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { EmailModule } from './modules/email/email.module';
@@ -42,6 +43,7 @@ export class AppModule {
         TransactionsModule,
         PlanningModule,
         ReportsModule,
+        WealthModule,
         HealthModule,
       ],
       providers: [

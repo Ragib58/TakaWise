@@ -9,6 +9,9 @@ import type { JournalKind, LedgerSystemCode, NormalBalance } from '../../generat
 
 type Db = PrismaService | Prisma.TransactionClient;
 
+const dateString = (value: Date | string): string =>
+  typeof value === 'string' ? value.slice(0, 10) : value.toISOString().slice(0, 10);
+
 export type JournalDraft = {
   userId: string;
   kind: JournalKind;
@@ -123,6 +126,43 @@ export class LedgerService {
         row.ledgerAccountId,
         balanceOf(normal, [{ debit: row._sum.debit ?? '0', credit: row._sum.credit ?? '0' }]),
       );
+    }
+    return result;
+  }
+
+  /**
+   * Net movement per ledger account per effective date, in each account's
+   * natural sign. Lets callers compute the balance on ANY date (net worth
+   * history, valuation roll-forward) from one query instead of one per date.
+   */
+  async dailyMovements(
+    db: Db,
+    accounts: ReadonlyArray<{ id: string; normalBalance: NormalBalance }>,
+  ): Promise<Map<string, Array<{ date: string; amount: Money }>>> {
+    const result = new Map<string, Array<{ date: string; amount: Money }>>(
+      accounts.map((a) => [a.id, []]),
+    );
+    if (accounts.length === 0) return result;
+    // SUM(numeric) comes back as a Prisma Decimal (or null for no rows).
+    type Sum = { toString(): string } | null;
+    const rows = await db.$queryRaw<
+      Array<{ ledger_account_id: string; effective_date: Date; debit: Sum; credit: Sum }>
+    >`
+      SELECT jl."ledger_account_id", je."effective_date",
+             SUM(jl."debit") AS "debit", SUM(jl."credit") AS "credit"
+        FROM "journal_lines" jl
+        JOIN "journal_entries" je ON je."id" = jl."journal_entry_id"
+       WHERE jl."ledger_account_id" = ANY(${accounts.map((a) => a.id)}::uuid[])
+       GROUP BY jl."ledger_account_id", je."effective_date"
+       ORDER BY je."effective_date"`;
+    const normalById = new Map(accounts.map((a) => [a.id, a.normalBalance]));
+    for (const row of rows) {
+      const normal = normalById.get(row.ledger_account_id);
+      if (!normal) continue;
+      result.get(row.ledger_account_id)!.push({
+        date: dateString(row.effective_date),
+        amount: balanceOf(normal, [{ debit: row.debit ?? '0', credit: row.credit ?? '0' }]),
+      });
     }
     return result;
   }

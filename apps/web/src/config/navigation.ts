@@ -2,12 +2,15 @@ import {
   ArrowLeftRight,
   Bell,
   ChartPie,
+  HandCoins,
   Inbox,
   LayoutDashboard,
   type LucideIcon,
   PiggyBank,
+  Scale,
   Settings,
   Target,
+  TrendingUp,
   Wallet,
 } from 'lucide-react';
 import type { MessageKey } from '@/lib/i18n/messages';
@@ -29,6 +32,9 @@ export const APP_NAV: NavItem[] = [
   { href: '/app/budgets', labelKey: 'nav.budgets', icon: PiggyBank, mobile: true },
   { href: '/app/goals', labelKey: 'nav.goals', icon: Target },
   { href: '/app/reports', labelKey: 'nav.reports', icon: ChartPie },
+  { href: '/app/investments', labelKey: 'nav.investments', icon: TrendingUp },
+  { href: '/app/loans', labelKey: 'nav.loans', icon: HandCoins },
+  { href: '/app/net-worth', labelKey: 'nav.netWorth', icon: Scale },
   { href: '/app/reminders', labelKey: 'nav.reminders', icon: Bell },
   { href: '/app/notifications', labelKey: 'nav.notifications', icon: Inbox },
   {

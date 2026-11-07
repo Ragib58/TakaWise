@@ -22,10 +22,26 @@ export function normalBalanceFor(cls: LedgerAccountClass): NormalBalance {
   return NORMAL_BALANCE_BY_CLASS[cls];
 }
 
-/** Credit cards are liabilities (ADR-008); every other account type is an asset. */
-export function ledgerClassForAccountType(type: FinancialAccountType): LedgerAccountClass {
-  return type === 'CREDIT_CARD_TRACKING' ? 'LIABILITY' : 'ASSET';
+/** Account types that represent money owed (ADR-008, ADR-022). Mirrored by a DB trigger. */
+const LIABILITY_ACCOUNT_TYPES: ReadonlySet<FinancialAccountType> = new Set([
+  'CREDIT_CARD_TRACKING',
+  'LOAN',
+]);
+
+/** Credit cards and borrowed loans are liabilities; every other account type is an asset. */
+export function ledgerClassForAccountType(type: FinancialAccountType): 'ASSET' | 'LIABILITY' {
+  return LIABILITY_ACCOUNT_TYPES.has(type) ? 'LIABILITY' : 'ASSET';
 }
+
+/**
+ * Account types managed by the wealth modules (Phase 8). They are created only
+ * through /investments and /loans so their detail record always exists.
+ */
+export const WEALTH_ACCOUNT_TYPES: ReadonlySet<FinancialAccountType> = new Set([
+  'INVESTMENT',
+  'LOAN',
+  'LOAN_RECEIVABLE',
+]);
 
 export type LineAmounts = { debit: MoneyInput; credit: MoneyInput };
 

@@ -48,6 +48,14 @@ erDiagram
     USERS ||--o{ REMINDERS : schedules
     USERS ||--o{ NOTIFICATIONS : gets
     USERS ||--o{ FILES : uploads
+    FINANCIAL_ACCOUNTS ||--o| INVESTMENTS : "details (INVESTMENT)"
+    FINANCIAL_ACCOUNTS ||--o| LOANS : "details (LOAN / LOAN_RECEIVABLE)"
+    LOANS ||--o{ LOAN_PAYMENTS : "repaid by"
+    TRANSFERS ||--o| LOAN_PAYMENTS : "principal"
+    TRANSACTIONS ||--o| LOAN_PAYMENTS : "interest"
+    INVESTMENTS ||--o{ VALUATIONS : "valued"
+    USERS ||--o{ NET_WORTH_ITEMS : owns
+    NET_WORTH_ITEMS ||--o{ VALUATIONS : "valued"
 ```
 
 `audit_logs` and `outbox_events` deliberately have **no foreign keys**: the audit trail must survive account deletion or anonymisation, and outbox rows may outlive their subject.
@@ -77,6 +85,11 @@ erDiagram
 | `outbox_events`            | Transactional outbox (ADR-014)                                                    | attempts ≥ 0                                                                                                    |
 | `files`                    | Object-storage metadata                                                           | size > 0                                                                                                        |
 | `audit_logs`               | Append-only audit trail                                                           | UPDATE/DELETE blocked                                                                                           |
+| `investments` (P8)         | Details of an `INVESTMENT` account (kind, maturity, user-entered rate/estimate)   | PK = account id. Account must be `INVESTMENT`. Rate 0–100. Quantity > 0                                         |
+| `loans` (P8)               | Details of a `LOAN` (borrowed) or `LOAN_RECEIVABLE` (lent) account                | PK = account id. Direction ↔ account type. Principal > 0. Term 1–600 and first payment date: both or neither    |
+| `loan_payments` (P8)       | Principal transfer + interest transaction of one repayment                        | amounts ≥ 0, sum > 0. Linked postings match the amounts. Append-only (only `POSTED → REVERSED`)                 |
+| `net_worth_items` (P8)     | Assets/liabilities that are not accounts (flat, car, informal debt)               | kind ↔ side. Active names unique per user. Archive consistent                                                   |
+| `valuations` (P8)          | Dated value of an investment or a net-worth item                                  | exactly one target. Value ≥ 0. One per target per date. Currency matches. `VERIFIED` rejected. Never updated    |
 
 ## Invariants enforced by the database
 
@@ -103,12 +116,28 @@ All of these live in `20261105152200_ledger_constraints/migration.sql`. The appl
 | DONE reminders ⇔ `completed_at`                             | CHECK on `reminders`                                           |
 | Fast scan of due, un-notified reminders                     | partial index `reminders_due_unnotified_idx`                   |
 
+### Added in Phase 8 (`20261107090000_wealth_account_types` … `20261107090200_wealth_rules`)
+
+| Invariant                                                                                               | Mechanism                                               |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `CREDIT_CARD_TRACKING` and `LOAN` map to LIABILITY ledger accounts; all other types to ASSET            | `tw_trg_ledger_accounts_class` (redefined)              |
+| Savings goals cannot be earmarked against any liability (card or loan)                                  | `tw_trg_savings_goals_account` (redefined)              |
+| Investment/loan details only on the matching account type                                               | `tw_trg_investments_account`, `tw_trg_loans_account`    |
+| A loan payment's transfer moves exactly the principal to/from the loan; its transaction is the interest | `tw_trg_loan_payments_consistency`                      |
+| Loan payments are append-only                                                                           | `tw_trg_loan_payments_guard`                            |
+| No `VERIFIED` valuations until a real data source exists                                                | CHECK `valuations_verified_requires_source`             |
+| One valuation per investment/item per date; never edited                                                | partial unique indexes + `valuations_immutable` trigger |
+| Valuation currency matches; investments not valued before opening                                       | `tw_trg_valuations_consistency`                         |
+
+Enum values are added in their own migration because PostgreSQL cannot use a new enum value in the transaction that added it.
+
 ### Application-only rules (not enforced in SQL)
 
 - Archived accounts and categories cannot receive **new** postings. History may still reference them.
 - An earmark cap: total goal contributions ≤ the linked account's ledger balance (ADR-009). This depends on live balances, so it is enforced in the service.
 - A transaction's amount equals its journal's amount. The posting service builds both from the same value.
 - Idempotency semantics (same hash → stored response; different hash → 422).
+- Phase 8: `INVESTMENT`/`LOAN`/`LOAN_RECEIVABLE` accounts are created only through `/investments` and `/loans`, so their detail row always exists (POST `/accounts` rejects these types). A loan payment's principal cannot exceed the outstanding balance. The two parts of a loan payment are reversed only together (the generic reverse endpoints refuse them).
 
 ## Migrations workflow
 
