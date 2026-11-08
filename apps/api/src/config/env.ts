@@ -145,6 +145,17 @@ export const envSchema = z
     AI_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(300_000).default(60_000),
     /** Receipt upload limit; the provider accepts images up to 5 MB. */
     OCR_MAX_BYTES: z.coerce.number().int().min(100_000).max(5_000_000).default(4_000_000),
+
+    // ── Subscriptions & family (Phase 10, ADR-025/026) ──
+    /**
+     * `none` until a payment provider is approved and integrated; `fake` is a
+     * signed, offline stand-in for development and tests (rejected in production).
+     */
+    PAYMENT_PROVIDER: z.enum(['none', 'fake']).default('none'),
+    /** Webhook signing secret shared with the provider (blueprint §12 PAYMENT_PROVIDER_SECRET). */
+    PAYMENT_PROVIDER_SECRET: secretSchema.optional(),
+    CHECKOUT_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+    FAMILY_INVITE_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production') {
@@ -201,6 +212,20 @@ export const envSchema = z
         code: 'custom',
         path: ['AI_PROVIDER'],
         message: 'choose a provider when AI_ENABLED=true',
+      });
+    }
+    if (env.PAYMENT_PROVIDER === 'fake' && env.NODE_ENV === 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYMENT_PROVIDER'],
+        message: 'the fake payment provider is not allowed in production',
+      });
+    }
+    if (env.PAYMENT_PROVIDER !== 'none' && !env.PAYMENT_PROVIDER_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['PAYMENT_PROVIDER_SECRET'],
+        message: 'required when PAYMENT_PROVIDER is set',
       });
     }
     if (env.DEV_LOG_OTP && env.NODE_ENV !== 'development') {

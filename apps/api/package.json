@@ -22,7 +22,8 @@
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "db:seed": "prisma db seed",
     "db:status": "prisma migrate status",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "admin:role": "tsx prisma/grant-role.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.6.0",

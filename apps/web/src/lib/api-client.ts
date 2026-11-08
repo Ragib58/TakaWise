@@ -60,6 +60,14 @@ export async function apiRequest<T>(
     throw new ApiError(0, 'NETWORK_ERROR', 'Could not reach the server. Check your connection.');
   }
 
+  // 204 No Content (e.g. DELETE): success without an envelope.
+  if (response.status === 204) {
+    return {
+      data: undefined as T,
+      meta: { requestId: response.headers.get('x-request-id') ?? '' },
+    };
+  }
+
   const payload: unknown = await response.json().catch(() => undefined);
 
   if (!response.ok) {

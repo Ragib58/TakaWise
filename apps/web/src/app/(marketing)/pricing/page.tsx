@@ -6,34 +6,34 @@ export const metadata: Metadata = { title: 'Pricing' };
 const PLANS = [
   {
     name: 'Free',
-    status: 'Available now (pilot)',
+    status: 'Available now',
     points: [
-      'Unlimited accounts and transactions',
-      'Budgets, goals and reminders',
-      'Reports and CSV export',
+      'Up to 10 active accounts; unlimited transactions',
+      'Budgets, goals, reminders, reports and CSV export',
+      'Investments, loans and net worth',
+      'Opt-in AI insights and typed transaction drafts (where enabled)',
     ],
   },
   {
     name: 'Pro',
-    status: 'Planned — not available yet',
-    points: [
-      'Recurring transactions and CSV import',
-      'Receipt scanning',
-      'Investments, loans and net worth',
-    ],
+    status: 'Not on sale yet — price to be announced',
+    points: ['Everything in Free', 'Unlimited accounts', 'Opt-in receipt scanning'],
   },
   {
     name: 'Family',
-    status: 'Planned — not available yet',
-    points: ['Shared family workspace', 'Roles and explicitly shared budgets'],
+    status: 'Not on sale yet — price to be announced',
+    points: [
+      'Everything in Pro',
+      'A family workspace for up to 6 people',
+      'Each person chooses exactly what to share; nothing else is visible',
+    ],
   },
 ];
-
 export default function PricingPage() {
   return (
     <ContentPage
       title="Pricing"
-      intro="TakaWise is free during the pilot. Paid plans are planned; nothing is charged today."
+      intro="TakaWise is free during the pilot. Paid plans are not on sale yet; nothing is charged today, and prices will be announced before anything is."
     >
       <div className="grid gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (

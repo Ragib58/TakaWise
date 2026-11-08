@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../../generated/prisma/client';
 import { normalBalanceFor, SYSTEM_LEDGER_ACCOUNTS } from '../../domain/ledger/ledger-rules';
+import { DEFAULT_FLAGS, DEFAULT_PLANS } from './saas-defaults';
 import { SYSTEM_CATEGORIES } from './system-categories';
 
 export type SeedSummary = { ledgerTemplates: number; categories: number };
@@ -64,6 +65,14 @@ export async function runSeed(prisma: PrismaClient): Promise<SeedSummary> {
           });
           categories += 1;
         }
+      }
+
+      // Phase 10: create-only; admins own these rows afterwards.
+      for (const plan of DEFAULT_PLANS) {
+        await tx.plan.upsert({ where: { code: plan.code }, create: plan, update: {} });
+      }
+      for (const flag of DEFAULT_FLAGS) {
+        await tx.featureFlag.upsert({ where: { key: flag.key }, create: flag, update: {} });
       }
 
       return { ledgerTemplates: SYSTEM_LEDGER_ACCOUNTS.length, categories };

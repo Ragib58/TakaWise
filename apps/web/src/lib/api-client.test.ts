@@ -34,6 +34,12 @@ describe('apiRequest', () => {
     );
   });
 
+  it('treats 204 No Content as success without an envelope', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const result = await apiRequest('/family/workspaces/x', { method: 'DELETE', fetchImpl });
+    expect(result.data).toBeUndefined();
+  });
+
   it('serialises JSON bodies with the right content type', async () => {
     const fetchImpl = vi
       .fn()

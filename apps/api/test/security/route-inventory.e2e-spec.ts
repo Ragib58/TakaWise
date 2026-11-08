@@ -22,6 +22,8 @@ const PUBLIC_ROUTES = new Set([
   'GET /api/v1/health',
   'GET /api/v1/health/ready',
   'GET /api/v1/metrics',
+  // Phase 10: provider webhooks, trusted only via HMAC signature (ADR-025).
+  'POST /api/v1/billing/webhooks/:provider',
 ]);
 
 type Layer = { route?: { path: string; methods: Record<string, boolean> } };

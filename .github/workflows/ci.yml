@@ -176,6 +176,8 @@ jobs:
       # Phase 9: the deterministic offline AI provider (never a real key in CI).
       AI_ENABLED: 'true'
       AI_PROVIDER: fake
+      # Every simulated user shares one IP; per-IP rate limits are covered by API tests.
+      THROTTLE_ENABLED: 'false'
 
     steps:
       - uses: actions/checkout@v4

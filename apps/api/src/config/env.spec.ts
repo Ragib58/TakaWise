@@ -161,4 +161,21 @@ describe('loadConfig', () => {
       expect(() => load({ OCR_MAX_BYTES: '6000000' })).toThrow(/OCR_MAX_BYTES/);
     });
   });
+
+  describe('payments (Phase 10)', () => {
+    it('has no payment provider by default', () => {
+      expect(load().PAYMENT_PROVIDER).toBe('none');
+    });
+
+    it('needs a signing secret for any provider and never allows fake in production', () => {
+      expect(() => load({ PAYMENT_PROVIDER: 'fake' })).toThrow(/PAYMENT_PROVIDER_SECRET/);
+      expect(
+        load({ PAYMENT_PROVIDER: 'fake', PAYMENT_PROVIDER_SECRET: 'p'.repeat(40) })
+          .PAYMENT_PROVIDER,
+      ).toBe('fake');
+      expect(() =>
+        load({ ...prodBase, PAYMENT_PROVIDER: 'fake', PAYMENT_PROVIDER_SECRET: 'p'.repeat(40) }),
+      ).toThrow(/fake payment provider/);
+    });
+  });
 });

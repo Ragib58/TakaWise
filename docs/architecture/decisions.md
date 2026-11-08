@@ -155,6 +155,9 @@ erDiagram
 | 022 | Investments and loans are ledger accounts with detail records                          | Accepted |
 | 023 | Valuations and net worth: labelled user values, computed on read, no double counting   | Accepted |
 | 024 | Opt-in AI and OCR: backend facts, fact-reference prose, consent, no auto-save          | Accepted |
+| 025 | Plans, entitlements and billing: server-enforced, signed idempotent webhooks           | Accepted |
+| 026 | Family workspaces: invitation codes, explicit read-only shares, immediate revocation   | Accepted |
+| 027 | Staff roles, admin route group and support: no access to financial content             | Accepted |
 
 ---
 
@@ -432,3 +435,96 @@ Posted journals and lines are immutable: application code never updates or delet
 - Before launch:
   - The provider's data-processing terms and retention (a zero-retention agreement if available) and the AI notice need legal review (launch blocker L1).
   - A real-provider smoke test with a production key must run in staging.
+
+## ADR-025 — Plans, entitlements and billing (Phase 10, 2026-11-08)
+
+**Context:** The blueprint asks for configurable Free, Pro and Family entitlements that are enforced on the server, and a payment-provider adapter with signed, idempotent webhooks. Card data must never be stored. Paid plans may only launch after product validation, legal review and merchant approval.
+
+**Decision:**
+
+- **Plans** are rows in `plans`: a code, name, price, interval, an `active` flag and an `entitlements` JSON. The JSON is validated by `planEntitlementsSchema` on every write and fails closed when read. The fields are `maxAccounts`, `aiInsights`, `aiDrafts`, `receiptOcr`, `familyWorkspace` and `maxFamilyMembers`.
+  - The seed is create-only, so admins own the rows afterwards.
+  - FREE is active at price 0.
+  - **PRO and FAMILY are seeded inactive at price 0.** Setting a price is a business decision, and nothing can be bought until an admin sets a price and activates the plan.
+- **Effective entitlements** are computed on every check. Nothing is cached.
+  - The base is the live subscription's plan (`TRIALING`, `ACTIVE` or `PAST_DUE`, with `current_period_end` in the future), or FREE.
+  - On top of that comes **family cover**: the plan of an owner whose workspace the user belongs to, if that plan includes family workspaces. Cover never lets a member own a workspace.
+- **Enforcement points:**
+  - Account creation counts active everyday accounts inside the idempotent transaction.
+  - The AI gate checks entitlements after the flag and consent checks (receipt OCR is not in FREE).
+  - Creating a workspace, inviting and accepting check the owner's plan and seats.
+  - Refusals return 403 `PLAN_REQUIRED`, with the entitlement in `details[0].field`.
+- **Billing flow:**
+  - Checkout records our own `billing_checkouts` row and redirects to the provider's hosted page.
+  - Only a webhook creates a subscription. The webhook refers to our checkout id, so the user and the plan always come from our records and never from the payload.
+  - The webhook is verified before it is parsed: `takawise-signature: t=…,v1=HMAC-SHA256(secret, "t.rawBody")`, with a ±5 minute tolerance. Failures return 401 `INVALID_SIGNATURE`.
+  - The handler applies the event and inserts `payment_events (provider, event_id)` in one transaction. A redelivery hits the unique key and changes nothing.
+  - `payment_events` are append-only (a DB trigger enforces this) and store only a SHA-256 hash of the payload.
+  - One live subscription per user is enforced by a partial unique index. A new purchase or grant ends the old one.
+  - Users can cancel at the end of the period, and access continues until then.
+- **Provider:**
+  - `PAYMENT_PROVIDER=none` is the default.
+  - `fake` is an offline, signed stand-in for development, CI and E2E, and is rejected in production. Its "hosted page" is the billing page, with a development-only button that sends a correctly signed webhook through the real path.
+  - No real Bangladeshi gateway is implemented. It needs merchant approval and its own adapter: map its callback to `PaymentEvent` and verify its own signature scheme.
+- **Runtime feature flags** (`feature_flags`) are admin kill switches on top of env config: `billing.checkout`, `family.workspaces`, `support.tickets` and `ai.assistant`. They are read on every check, so a change takes effect immediately on all instances.
+
+**Consequences:**
+
+- Turning on paid plans is a configuration change, not a deploy.
+- VAT and invoicing, refunds, trials, proration, renewal reminders and a dunning e-mail flow are not built. They depend on the chosen provider and need legal and tax advice.
+- A subscription that passes its period end without a renewal webhook stops granting access at read time. Its status changes only when a new purchase or grant ends it.
+
+## ADR-026 — Family workspaces (Phase 10, 2026-11-08)
+
+**Context:** The blueprint requires family workspaces with invitations, roles and explicitly shared resources. A family owner must not be able to silently inspect a member's private space, and revoking membership must remove access immediately.
+
+**Decision:**
+
+- **Roles and limits:**
+  - Roles are `OWNER`, `ADMIN` and `MEMBER`. Each workspace has exactly one owner, enforced by a partial unique index.
+  - A user can own one workspace.
+  - Owners and admins invite; only the owner can invite or remove admins.
+  - The owner cannot leave and must delete the workspace instead. Anyone else can leave.
+- **Invitations:**
+  - An invitation is e-mailed as a 10-character code (about 50 bits, no ambiguous characters). Only an HMAC of the code is stored, and it expires after `FAMILY_INVITE_TTL_HOURS` (7 days by default).
+  - Accepting requires being signed in **with the invited e-mail address**. The code is single-use, the endpoint is throttled, and every failure returns the same 400.
+  - E-mails never carry tokenised links, consistent with ADR-017.
+- **Sharing is explicit and per item.** A member shares one of **their own** accounts, budgets or goals.
+  - Ownership is checked in the service, with a DB trigger as a backstop because the reference is polymorphic.
+  - Others see a live, read-only summary: an account's name and balance, a budget's spent and limit, or a goal's progress. The linked account, transactions and notes are never shown.
+  - Joining a workspace shares nothing.
+- **Access is checked on every request.** An active membership is required, and non-members get 404 so they cannot learn that a workspace exists. Shares count only while the sharer is an active member.
+- **Removing or leaving** ends the membership and revokes that person's shares in the same transaction, so access ends both ways immediately.
+- If the owner's plan lapses, new invitations, acceptances and workspace creation are refused, and members lose family cover. Existing shares stay visible until they are removed.
+
+**Consequences:**
+
+- Shared resources are view-only. Editing a shared budget together, or splitting expenses, is future work.
+- Member e-mails are visible inside a workspace, because people were invited by e-mail.
+
+## ADR-027 — Staff roles, admin route group and support (Phase 10, 2026-11-08)
+
+**Context:** The blueprint asks for admins who manage plan metadata, subscriptions, feature flags, aggregate analytics and support tickets, and says admins cannot inspect transaction contents by default. Support staff should have tickets and limited account metadata only. The admin area must be a separately protected route group, and privileged actions must be audited.
+
+**Decision:**
+
+- `users.platform_role` is one of `NONE` (every customer), `SUPPORT` or `ADMIN`.
+  - The first admin can only be created with the operator CLI (`pnpm --filter @takawise/api admin:role -- <email> ADMIN`), which requires database credentials and is audited.
+  - After that, admins change roles in the app. They cannot change their own role, so there is no accidental lock-out.
+- **API (`/api/v1/admin/*`):**
+  - A controller-level `PlatformRolesGuard` runs after the global JWT guard, reads the role from the database on every request (demotion is immediate), and denies by default.
+  - SUPPORT can use tickets and user lookup.
+  - ADMIN can also use plans, subscriptions (complimentary grants and ending them), roles, feature flags and analytics.
+- **No financial content.**
+  - The admin service has no path to accounts, transactions, budgets, goals, AI insights or notes.
+  - User lookup returns exactly id, e-mail, name, status, verification, role, created-at and subscription. Analytics are aggregate counts only.
+  - Staff accounts get no special access to the ordinary user endpoints, whose ownership checks still apply.
+- **Support tickets** contain only what the user wrote. The form warns never to include passwords, PINs, OTPs or card numbers.
+- **Audit.** Every admin and support action is audited with the staff member as `actor_id` and the customer as `user_id`. Audit rows never include message bodies.
+- **Web.** `/admin` is its own route group with its own layout, no customer navigation, and `noindex`. It is an English-only internal tool. The UI gate only hides the console from customers; the API is the boundary.
+
+**Consequences:**
+
+- Staff cannot "look at the user's data" to debug. They must ask the user, and that is intended.
+- MFA for staff accounts is not built yet and is a launch blocker for granting ADMIN in production.
+- Analytics cells are not suppressed for small counts. Only aggregate counts are shown.

@@ -14,6 +14,8 @@ import { APP_CONFIG } from '../../config/config.module';
 import type { AppConfig } from '../../config/env';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EntitlementsService } from '../saas/entitlements.service';
+import { FeatureFlagsService } from '../saas/feature-flags.service';
 import {
   type AiGenerateRequest,
   AiProvider,
@@ -22,6 +24,14 @@ import {
 } from './providers/ai-provider';
 
 const DAY_MS = 86_400_000;
+
+const ENTITLEMENT_FOR_FEATURE = {
+  MONTHLY_SUMMARY: 'aiInsights',
+  UNUSUAL_SPENDING: 'aiInsights',
+  SAVINGS_SUGGESTIONS: 'aiInsights',
+  TRANSACTION_DRAFT: 'aiDrafts',
+  RECEIPT_OCR: 'receiptOcr',
+} as const satisfies Record<AiFeature, 'aiInsights' | 'aiDrafts' | 'receiptOcr'>;
 
 const startOfUtcMonth = (now: Date) =>
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -50,6 +60,8 @@ export class AiService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly provider: AiProvider,
     private readonly audit: AuditService,
+    private readonly flags: FeatureFlagsService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   get enabled(): boolean {
@@ -173,6 +185,9 @@ export class AiService {
         [{ field: 'scope', message: scope }],
       );
     }
+    // Phase 10: admin kill switch, then the plan (ADR-025).
+    await this.flags.assertOn('ai.assistant');
+    await this.entitlements.assertFeature(userId, ENTITLEMENT_FOR_FEATURE[feature]);
   }
 
   /**

@@ -64,7 +64,33 @@ export type AuditAction =
   // Phase 9: opt-in AI and OCR (never the content sent or received)
   | 'ai.consent.granted'
   | 'ai.consent.revoked'
-  | 'ai.data.deleted';
+  | 'ai.data.deleted'
+  // Phase 10: subscriptions, family, support and admin
+  | 'billing.checkout.created'
+  | 'billing.subscription.activated'
+  | 'billing.subscription.renewed'
+  | 'billing.subscription.canceled'
+  | 'billing.subscription.past_due'
+  | 'billing.subscription.cancel_requested'
+  | 'family.workspace.created'
+  | 'family.workspace.renamed'
+  | 'family.workspace.deleted'
+  | 'family.invitation.sent'
+  | 'family.invitation.revoked'
+  | 'family.invitation.accepted'
+  | 'family.member.removed'
+  | 'family.member.left'
+  | 'family.member.role_changed'
+  | 'family.share.created'
+  | 'family.share.revoked'
+  | 'support.ticket.created'
+  | 'support.ticket.replied'
+  | 'support.ticket.status_changed'
+  | 'admin.plan.updated'
+  | 'admin.subscription.granted'
+  | 'admin.subscription.canceled'
+  | 'admin.role.changed'
+  | 'admin.flag.updated';
 
 export type AuditEvent = {
   action: AuditAction;

@@ -19,6 +19,8 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(config), {
     bufferLogs: true,
+    // Raw bytes for webhook signature verification (ADR-025).
+    rawBody: true,
   });
   configureApp(app, config);
 

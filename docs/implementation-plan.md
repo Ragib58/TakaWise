@@ -227,9 +227,32 @@ Endpoint-by-endpoint auth, ownership and validation review; dependency and secre
 - Web component test.
 - Playwright assistant flow.
 
-### Phase 10 (post-MVP)
+### Phase 10 — Subscriptions, family and admin (post-MVP)
 
-Subscriptions, family and admin. Follows the blueprint prompt.
+**Build** (ADR-025/026/027):
+
+- **Plans and entitlements.** Plans with configurable entitlements are enforced server-side: account limit, AI features and family workspaces. FREE is active; PRO and FAMILY are seeded inactive at price 0 until an admin sets prices. Family cover extends the owner's plan to members.
+- **Billing.** Checkout is recorded on our side. Only HMAC-signed, timestamped and idempotent webhooks create or change subscriptions; `payment_events` are append-only. Users can cancel at the end of the period. An offline `fake` provider covers dev, CI and E2E. No card data is stored.
+- **Family workspaces.**
+  - Invitations are e-mailed as codes bound to the invitee's e-mail.
+  - Roles are OWNER, ADMIN and MEMBER.
+  - Members explicitly share their own account, budget or goal as live read-only summaries, with a DB ownership trigger as a backstop.
+  - Removing or leaving revokes access and shares at once.
+- **Support tickets.**
+- **Admin route group** (`/admin`, separate layout):
+  - SUPPORT staff handle tickets and limited user metadata.
+  - ADMIN staff additionally manage plans, complimentary subscriptions, roles, feature-flag kill switches and aggregate analytics.
+  - There is no access to financial content.
+  - Staff roles come from the CLI bootstrap (`admin:role`), and every staff action is audited.
+- **Docs.** [Launch checklist](launch-checklist.md).
+
+**Tests:**
+
+- Unit: entitlements, signatures, config.
+- API + DB: entitlement enforcement, webhook security and idempotency, staff boundaries, no financial content, tickets, kill switch, family invitations, cover, sharing, revocation and roles, plus DB backstops.
+- Route inventory (the webhook is the only new public route).
+- Web views.
+- Playwright family/admin/support flow.
 
 ---
 
@@ -326,7 +349,7 @@ Run the next phase prompt (see the progress log below). Before each phase: commi
 | 7     | Done   | 2026-11-06 | Route-inventory auth test (every route default-deny), endpoint/ownership review, Redis-backed rate limits with fallback, Prometheus metrics, log/DB-error redaction, JWT key rotation, web CSP + secure headers, graceful shutdown order, read-performance indexes, Docker images (API, migrator, web), CI security/image scans (pnpm audit, gitleaks, Trivy), gated staging→production deploy workflow + smoke test, restore drill (PASS), k6 load test (pilot profile PASS; stress limits documented), runbooks, MVP acceptance checklist. ADR-021. Deployment is scaffolded; cloud target not provisioned.                                                                                                                                                                                                                                       |
 | 8     | Done   | 2026-11-07 | Investments (DPS/FDR/sanchayapatra/bond/stock/fund/gold) and loans (borrowed/lent) as ledger accounts with detail tables; funding/withdrawal/disbursement/principal as transfers, returns/interest as income/expense; atomic, idempotent loan payments (principal transfer + interest transaction) with joint reversal and generic-reverse guard; estimated EMI schedule, next due date and suggested split; valuations (user-entered/estimated, verified rejected by DB) and net-worth items; net worth + 2–24 month history computed on read with valuation roll-forward (no double counting); 3 migrations (enum values, tables, rules); Investments/Loans/Net worth pages (EN/BN), Playwright wealth flow. ADR-022/023. [docs/api/wealth.md](api/wealth.md).                                                                                    |
 | 9     | Done   | 2026-11-07 | Opt-in AI behind the operator switch, per-feature flags and per-scope versioned consent; backend-computed facts with `{{fact}}`-reference prose (no model-written digits) and validation; monthly summary, deterministic unusual-spending detection, saving ideas (cached by facts hash); NL transaction drafts and receipt OCR (redacted input, alias-only refs, magic-byte sniffing, image never stored, review-before-save in the normal form); Anthropic SDK adapter (structured outputs, no tools, refusal fallback) + offline fake provider; per-user/global limits, usage rows without content, delete-my-AI-data, audit; `/app/assistant` (EN/BN) with data-scope controls and disclaimers; Playwright assistant flow. ADR-024. [docs/api/ai.md](api/ai.md).                                                                                |
-| 10    | Next   |            | Subscriptions, family workspaces and admin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 10    | Done   | 2026-11-08 | Plans with configurable, server-enforced entitlements (account limit, AI features, family) and family cover; billing with our-side checkouts, HMAC-signed timestamped idempotent webhooks, append-only payment events, cancel-at-period-end, offline fake provider (no real gateway until merchant approval; no card data); family workspaces with e-mailed codes bound to the invitee, roles, explicit read-only shares of own accounts/budgets/goals (DB ownership trigger), immediate revocation; support tickets; separate `/admin` route group (SUPPORT/ADMIN via DB-checked guard, CLI bootstrap, audited; plans, complimentary grants, roles, kill-switch flags, aggregate analytics; no financial content); launch checklist. ADR-025/026/027. [docs/api/saas.md](api/saas.md).                                                             |
 
 **Phase 2 notes:** readiness checks the database only (Redis is added with BullMQ). The earmark cap and "no postings to archived accounts or categories" are service-level rules for Phases 4–5. The test DB is migrated with `migrate deploy` and never reset automatically.
 

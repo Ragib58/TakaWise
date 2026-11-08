@@ -408,6 +408,17 @@ describe('AI enabled (scripted provider)', () => {
     it('extracts a reviewable draft from an image held only in memory', async () => {
       const { api, session } = await newUser(app);
       const token = bearer(session);
+      // Receipt OCR is a paid feature (Phase 10, ADR-025).
+      const owner = await prisma.user.findUniqueOrThrow({ where: { email: session.email } });
+      await prisma.subscription.create({
+        data: {
+          userId: owner.id,
+          planCode: 'PRO',
+          status: 'ACTIVE',
+          provider: 'admin',
+          currentPeriodEnd: new Date(Date.now() + 86_400_000),
+        },
+      });
       await createAccount(api, {
         name: 'Cash',
         type: 'CASH',

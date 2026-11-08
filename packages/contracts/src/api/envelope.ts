@@ -34,6 +34,9 @@ export const API_ERROR_CODES = [
   'AI_UNAVAILABLE',
   'AI_OUTPUT_INVALID',
   'UNSUPPORTED_MEDIA_TYPE',
+  // Subscriptions, family and admin (Phase 10)
+  'PLAN_REQUIRED',
+  'INVALID_SIGNATURE',
 ] as const;
 
 export const apiErrorCodeSchema = z.enum(API_ERROR_CODES);

@@ -23,6 +23,7 @@ import { AuditService } from '../audit/audit.service';
 import { IdempotencyService, type IdempotentResult } from '../idempotency/idempotency.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { OutboxService } from '../ledger/outbox.service';
+import { EntitlementsService } from '../saas/entitlements.service';
 import { toAccountResponse } from './accounts.mapper';
 
 type CreateAccountInput = Omit<CreateAccountRequest, 'currency' | 'openingBalance'> & {
@@ -46,6 +47,7 @@ export class AccountsService {
     private readonly idempotency: IdempotencyService,
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   /** ACC-01/ACC-02: creates the account, its ledger account and the OPENING_BALANCE journal. */
@@ -63,6 +65,8 @@ export class AccountsService {
         request: input,
         responseStatus: HttpStatus.CREATED,
         run: async (tx) => {
+          // Plan limit (ADR-025), counted in the same transaction as the insert.
+          await this.entitlements.assertCanAddAccount(userId, tx);
           const { account, openingBalance } = await this.createInTx(tx, userId, input, client);
           return toAccountResponse(account, openingBalance);
         },

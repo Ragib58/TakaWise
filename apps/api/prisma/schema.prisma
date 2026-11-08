@@ -196,14 +196,16 @@ enum FileStatus {
 // ─────────────────────────── Identity ────────────────────────────
 
 model User {
-  id              String     @id @default(uuid(7)) @db.Uuid
+  id              String       @id @default(uuid(7)) @db.Uuid
   /// Always stored lower-cased and trimmed (CHECK users_email_normalized).
-  email           String     @unique @db.VarChar(254)
-  passwordHash    String     @map("password_hash") @db.VarChar(255)
-  status          UserStatus @default(PENDING_VERIFICATION)
-  emailVerifiedAt DateTime?  @map("email_verified_at") @db.Timestamptz(3)
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  email           String       @unique @db.VarChar(254)
+  passwordHash    String       @map("password_hash") @db.VarChar(255)
+  status          UserStatus   @default(PENDING_VERIFICATION)
+  emailVerifiedAt DateTime?    @map("email_verified_at") @db.Timestamptz(3)
+  /// Staff role (ADR-027); granted only via the admin CLI or by another admin.
+  platformRole    PlatformRole @default(NONE) @map("platform_role")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   profile            UserProfile?
   sessions           Session[]
@@ -229,6 +231,13 @@ model User {
   aiConsents         AiConsent[]
   aiRequests         AiRequest[]
   aiInsights         AiInsight[]
+  subscriptions      Subscription[]
+  billingCheckouts   BillingCheckout[]
+  supportTickets     SupportTicket[]
+  supportMessages    SupportMessage[]
+  ownedWorkspaces    FamilyWorkspace[]   @relation("FamilyOwner")
+  familyMemberships  FamilyMember[]
+  familyShares       FamilyShare[]
 
   @@map("users")
 }
@@ -937,4 +946,263 @@ model AiInsight {
 
   @@unique([userId, kind, month, currency, locale])
   @@map("ai_insights")
+}
+
+// ───────────────────── Subscriptions, family and admin (Phase 10) ─────────────────────
+
+/// Staff role on the SaaS platform (ADR-027). NONE for every customer.
+enum PlatformRole {
+  NONE
+  SUPPORT
+  ADMIN
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  /// Renewal payment failed; access continues until current_period_end.
+  PAST_DUE
+  /// Ended early (provider cancellation, replaced by another plan, admin).
+  CANCELED
+  EXPIRED
+}
+
+enum CheckoutStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+enum FamilyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum FamilyMemberStatus {
+  ACTIVE
+  REMOVED
+  LEFT
+}
+
+enum ShareResourceType {
+  ACCOUNT
+  BUDGET
+  GOAL
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  ACCOUNT
+  BILLING
+  BUG
+  FEATURE
+  OTHER
+}
+
+/// Sellable plan with configurable, server-enforced entitlements (ADR-025).
+model Plan {
+  code         String          @id @db.VarChar(20)
+  name         String          @db.VarChar(60)
+  /// 0 for FREE. Set by an admin; never invented in code.
+  priceAmount  Decimal         @default(0) @map("price_amount") @db.Decimal(20, 4)
+  currency     String          @default("BDT") @db.Char(3)
+  interval     BillingInterval @default(MONTH)
+  /// Purchasable through checkout. Admin grants work regardless.
+  active       Boolean         @default(false)
+  /// Validated by planEntitlementsSchema (contracts) on every write.
+  entitlements Json
+  sortOrder    Int             @default(0) @map("sort_order")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  subscriptions Subscription[]
+  checkouts     BillingCheckout[]
+
+  @@map("plans")
+}
+
+/// A user's paid or granted plan. At most one live row per user (partial unique index).
+model Subscription {
+  id                     String             @id @default(uuid(7)) @db.Uuid
+  userId                 String             @map("user_id") @db.Uuid
+  planCode               String             @map("plan_code") @db.VarChar(20)
+  status                 SubscriptionStatus
+  /// `fake`, a real provider id, or `admin` for a complimentary grant.
+  provider               String             @db.VarChar(30)
+  /// Provider's id (never card data).
+  providerSubscriptionId String?            @map("provider_subscription_id") @db.VarChar(120)
+  currentPeriodEnd       DateTime           @map("current_period_end") @db.Timestamptz(3)
+  cancelAtPeriodEnd      Boolean            @default(false) @map("cancel_at_period_end")
+  endedAt                DateTime?          @map("ended_at") @db.Timestamptz(3)
+  note                   String?            @db.VarChar(200)
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan Plan @relation(fields: [planCode], references: [code], onDelete: Restrict)
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+/// Our side of a hosted checkout. The webhook references this row, so the user
+/// and plan always come from our records, never from the provider payload.
+model BillingCheckout {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  planCode    String         @map("plan_code") @db.VarChar(20)
+  status      CheckoutStatus @default(PENDING)
+  provider    String         @db.VarChar(30)
+  /// Price at the time of checkout.
+  amount      Decimal        @db.Decimal(20, 4)
+  currency    String         @db.Char(3)
+  expiresAt   DateTime       @map("expires_at") @db.Timestamptz(3)
+  completedAt DateTime?      @map("completed_at") @db.Timestamptz(3)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  plan Plan @relation(fields: [planCode], references: [code], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@map("billing_checkouts")
+}
+
+/// Every verified webhook, once. The unique key makes processing idempotent.
+model PaymentEvent {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  provider    String   @db.VarChar(30)
+  eventId     String   @map("event_id") @db.VarChar(120)
+  type        String   @db.VarChar(60)
+  /// SHA-256 of the raw body; the payload itself is not stored.
+  payloadHash String   @map("payload_hash") @db.Char(64)
+  outcome     String   @db.VarChar(40)
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@map("payment_events")
+}
+
+/// Runtime kill switches managed by admins (layered on top of env flags).
+model FeatureFlag {
+  key         String   @id @db.VarChar(60)
+  enabled     Boolean
+  description String   @db.VarChar(200)
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("feature_flags")
+}
+
+model SupportTicket {
+  id        String         @id @default(uuid(7)) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  subject   String         @db.VarChar(150)
+  category  TicketCategory
+  status    TicketStatus   @default(OPEN)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages SupportMessage[]
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ticketId  String   @map("ticket_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  fromStaff Boolean  @map("from_staff")
+  body      String   @db.VarChar(4000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User          @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
+}
+
+/// Family workspace (ADR-026). Nothing is visible to members unless shared.
+model FamilyWorkspace {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  name      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner       User               @relation("FamilyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members     FamilyMember[]
+  invitations FamilyInvitation[]
+  shares      FamilyShare[]
+
+  @@map("family_workspaces")
+}
+
+model FamilyMember {
+  workspaceId String             @map("workspace_id") @db.Uuid
+  userId      String             @map("user_id") @db.Uuid
+  role        FamilyRole
+  status      FamilyMemberStatus @default(ACTIVE)
+  joinedAt    DateTime           @default(now()) @map("joined_at") @db.Timestamptz(3)
+  endedAt     DateTime?          @map("ended_at") @db.Timestamptz(3)
+
+  workspace FamilyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+  @@index([userId, status])
+  @@map("family_members")
+}
+
+/// Invitation by e-mail; only an HMAC of the code is stored.
+model FamilyInvitation {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  workspaceId  String     @map("workspace_id") @db.Uuid
+  email        String     @db.VarChar(254)
+  role         FamilyRole
+  codeHash     String     @unique @map("code_hash") @db.Char(64)
+  invitedById  String     @map("invited_by_id") @db.Uuid
+  expiresAt    DateTime   @map("expires_at") @db.Timestamptz(3)
+  acceptedAt   DateTime?  @map("accepted_at") @db.Timestamptz(3)
+  acceptedById String?    @map("accepted_by_id") @db.Uuid
+  revokedAt    DateTime?  @map("revoked_at") @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace FamilyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("family_invitations")
+}
+
+/// A member explicitly sharing one of their own resources (read-only).
+model FamilyShare {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  workspaceId  String            @map("workspace_id") @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  resourceType ShareResourceType @map("resource_type")
+  resourceId   String            @map("resource_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt    DateTime?         @map("revoked_at") @db.Timestamptz(3)
+
+  workspace FamilyWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("family_shares")
 }

@@ -3,7 +3,9 @@ import {
   Bell,
   ChartPie,
   HandCoins,
+  CreditCard,
   Inbox,
+  LifeBuoy,
   LayoutDashboard,
   type LucideIcon,
   PiggyBank,
@@ -12,6 +14,7 @@ import {
   Sparkles,
   Target,
   TrendingUp,
+  Users,
   Wallet,
 } from 'lucide-react';
 import type { MessageKey } from '@/lib/i18n/messages';
@@ -37,8 +40,11 @@ export const APP_NAV: NavItem[] = [
   { href: '/app/loans', labelKey: 'nav.loans', icon: HandCoins },
   { href: '/app/net-worth', labelKey: 'nav.netWorth', icon: Scale },
   { href: '/app/assistant', labelKey: 'nav.assistant', icon: Sparkles },
+  { href: '/app/family', labelKey: 'nav.family', icon: Users },
   { href: '/app/reminders', labelKey: 'nav.reminders', icon: Bell },
   { href: '/app/notifications', labelKey: 'nav.notifications', icon: Inbox },
+  { href: '/app/billing', labelKey: 'nav.billing', icon: CreditCard },
+  { href: '/app/support', labelKey: 'nav.support', icon: LifeBuoy },
   {
     href: '/app/settings/profile',
     labelKey: 'nav.settings',

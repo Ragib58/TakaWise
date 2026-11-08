@@ -37,6 +37,8 @@ const DEFAULT_MESSAGES: Record<ApiErrorCode, string> = {
   AI_UNAVAILABLE: 'The AI assistant is temporarily unavailable. Nothing was saved.',
   AI_OUTPUT_INVALID: 'The AI assistant could not produce a reliable answer. Nothing was saved.',
   UNSUPPORTED_MEDIA_TYPE: 'This file type is not supported.',
+  PLAN_REQUIRED: 'Your plan does not include this feature.',
+  INVALID_SIGNATURE: 'Invalid signature.',
 };
 
 export function codeForStatus(status: number): ApiErrorCode {
